@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мои Финансы</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="container">
+    <section id="absolute-balance-section" style="text-align: center; margin-bottom: 20px; padding: 15px; background: #f0f8ff; border-radius: 8px;">
+        <h2 style="margin: 0; font-size: 1.2em; color: #555;">Текущий остаток средств</h2>
+        <p id="absolute-balance" style="font-size: 2.5em; font-weight: bold; margin: 5px 0; color: #2c3e50;">Загрузка...</p>
+    </section>
+
+    <section id="summary-section" style="display: flex; justify-content: space-around; text-align: center; margin-bottom: 20px;">
+        <div id="period-income"></div>
+        <div id="period-expense"></div>
+        <div id="period-net"></div>
+    </section>
+
+    <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+        <button id="add-income-btn" style="background-color: #27AE60; flex-grow: 1;">+ Доход</button>
+        <button id="add-expense-btn" style="background-color: #C0392B; flex-grow: 1;">- Расход</button>
+        <button id="scan-receipt-btn" style="flex-grow: 1;">Сканировать чек</button>
+    </div>
+
+    <section id="chart-section" style="margin-bottom: 20px;">
+        <canvas id="expense-chart"></canvas>
+    </section>
+
+    <section>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>Транзакции за период</h2>
+            <div id="filter-buttons">
+                <button data-period="day" class="active">День</button>
+                <button data-period="week">Неделя</button>
+                <button data-period="month">Месяц</button>
+            </div>
+        </div>
+        <ul id="transaction-list"></ul>
+    </section>
+</div>
+
+<!-- Модальное окно для РАСХОДА -->
+<div id="expense-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2 id="expense-modal-title">Добавить новый расход</h2>
+        <form id="expense-form">
+            <input type="hidden" id="expense-id"> <!-- ВОТ ЭТОТ ЭЛЕМЕНТ БЫЛ ПРОПУЩЕН -->
+            <div class="form-group"><label for="expense-amount">Сумма:</label><input type="number" id="expense-amount" step="0.01" required></div>
+            <div class="form-group"><label for="expense-date">Дата:</label><input type="date" id="expense-date" required></div>
+            <div class="form-group"><label for="expense-category">Категория:</label><select id="expense-category" required></select><a href="#" id="add-category-link" style="font-size: 12px; display: block; margin-top: 5px;">Добавить новую категорию</a></div>
+            <div class="form-group"><label for="expense-description">Уточнение (необязательно):</label><input type="text" id="expense-description"></div>
+            <button type="submit">Сохранить</button>
+        </form>
+        <div id="expense-error-message" class="error-message"></div>
+    </div>
+</div>
+
+<!-- Модальное окно для КАТЕГОРИИ -->
+<div id="category-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2 id="category-modal-title">Создать новую категорию</h2>
+        <form id="category-form">
+            <input type="hidden" id="category-id">
+            <div class="form-group"><label for="category-name">Название:</label><input type="text" id="category-name" required></div>
+            <div class="form-group" style="text-align: center;">
+                <label>Предпросмотр</label>
+                <div id="icon-preview" style="font-size: 3em; width: 80px; height: 80px; margin: auto; border: 1px solid #ccc; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.3s, background-color 0.3s;">
+                    <i class="fas fa-shopping-basket"></i>
+                </div>
+            </div>
+            <div class="form-group"><label>Выберите иконку:</label><div id="icon-picker" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;"></div></div>
+            <div class="form-group"><label>Выберите цвет:</label><div id="color-palette" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;"></div></div>
+            <button type="submit">Сохранить</button>
+        </form>
+        <div id="category-error-message" class="error-message"></div>
+    </div>
+</div>
+
+<!-- Модальное окно для ЧЕКА -->
+<div id="receipt-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>Сканировать QR-код чека</h2>
+        <div class="form-group"><label for="receipt-file-input">Выберите фото чека:</label><input type="file" id="receipt-file-input" accept="image/*"></div>
+        <div id="receipt-preview-container" style="display: none; margin-top: 10px;"><img id="receipt-preview" src="#" alt="Предпросмотр чека" style="max-width: 100%; height: auto;"></div>
+        <div id="receipt-error-message" class="error-message" style="margin-top: 10px;"></div>
+    </div>
+</div>
+
+<!-- Модальное окно для ДОХОДА -->
+<div id="income-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2 id="income-modal-title">Добавить новый доход</h2>
+        <form id="income-form">
+            <input type="hidden" id="income-id"> <!-- И ЭТОТ ТОЖЕ -->
+            <div class="form-group"><label for="income-amount">Сумма:</label><input type="number" id="income-amount" step="0.01" required></div>
+            <div class="form-group"><label for="income-date">Дата:</label><input type="date" id="income-date" required></div>
+            <div class="form-group"><label for="income-description">Описание (необязательно):</label><input type="text" id="income-description" placeholder="Например: Зарплата"></div>
+            <button type="submit">Сохранить</button>
+        </form>
+        <div id="income-error-message" class="error-message"></div>
+    </div>
+</div>
+
+<script src="/js/main.js"></script>
+</body>
+</html>
