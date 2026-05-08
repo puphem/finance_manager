@@ -3,6 +3,7 @@ package com.example.financemanager.controller;
 import com.example.financemanager.dto.ReceiptResponseDto;
 import com.example.financemanager.dto.ScanReceiptRequestDto;
 import com.example.financemanager.service.ReceiptService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +20,7 @@ public class ReceiptController {
     private final ReceiptService receiptService;
 
     @PostMapping("/scan")
-    public ResponseEntity<ReceiptResponseDto> scanAndProcessReceipt(@RequestBody ScanReceiptRequestDto requestDto) {
+    public ResponseEntity<ReceiptResponseDto> scanAndProcessReceipt(@Valid @RequestBody ScanReceiptRequestDto requestDto) {
         ReceiptResponseDto responseDto = receiptService.processAndSaveReceipt(requestDto);
         return new ResponseEntity<>(responseDto, HttpStatus.CREATED);
     }

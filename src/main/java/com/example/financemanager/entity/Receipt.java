@@ -30,6 +30,9 @@ public class Receipt {
     @Column(nullable = false)
     private BigDecimal totalAmount;
 
+    @Column(nullable = false, unique = true, length = 255)
+    private String receiptKey;
+
     @OneToMany(mappedBy = "receipt", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Expense> expenses = new ArrayList<>(); // Инициализируем список
 
