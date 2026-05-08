@@ -23,7 +23,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class FnsApiClient {
 
-    // Distinguishes epoch milliseconds from epoch seconds while parsing API timestamp fields.
+    // Values up to this threshold are treated as epoch seconds; larger values are epoch milliseconds.
+    // This safely separates typical second-based timestamps from millisecond-based ones.
     private static final long EPOCH_MILLIS_THRESHOLD = 9_999_999_999L;
 
     private final WebClient.Builder webClientBuilder;
@@ -127,6 +128,9 @@ public class FnsApiClient {
     private FnsReceiptResponse buildFallbackResponseFromQr(String qrCodeData) {
         Map<String, String> params = ReceiptQrUtils.parseQrParams(qrCodeData);
         long totalSumInCents = parseTotalSumToCents(params.get("s"));
+        if (totalSumInCents <= 0) {
+            throw new IllegalStateException("Не удалось определить сумму чека из QR-кода.");
+        }
         LocalDateTime dateTime = parseReceiptDate(params.get("t"));
         String documentNumber = params.getOrDefault("i", "неизвестен");
 
