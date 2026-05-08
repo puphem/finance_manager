@@ -11,6 +11,7 @@ import com.example.financemanager.mapper.ReceiptMapper;
 import com.example.financemanager.repository.ReceiptRepository;
 import com.example.financemanager.service.CategoryAssignmentService;
 import com.example.financemanager.service.ReceiptService;
+import com.example.financemanager.util.ReceiptQrUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,10 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.Arrays;
-import java.util.Locale;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +32,7 @@ public class ReceiptServiceImpl implements ReceiptService {
     @Override
     @Transactional
     public ReceiptResponseDto processAndSaveReceipt(ScanReceiptRequestDto requestDto) {
-        String receiptKey = buildReceiptKey(requestDto.getQrCodeData());
+        String receiptKey = ReceiptQrUtils.buildReceiptKey(requestDto.getQrCodeData());
         if (receiptRepository.existsByReceiptKey(receiptKey)) {
             throw new DuplicateResourceException("Этот чек уже был добавлен в траты.");
         }
@@ -80,34 +77,6 @@ public class ReceiptServiceImpl implements ReceiptService {
         Receipt savedReceipt = receiptRepository.save(receipt);
 
         return receiptMapper.toResponseDto(savedReceipt);
-    }
-
-    private String buildReceiptKey(String qrCodeData) {
-        if (qrCodeData == null || qrCodeData.isBlank()) {
-            throw new IllegalStateException("QR-код чека пустой.");
-        }
-
-        Map<String, String> params = Arrays.stream(qrCodeData.split("&"))
-                .map(part -> part.split("=", 2))
-                .filter(parts -> parts.length == 2)
-                .collect(Collectors.toMap(
-                        pair -> pair[0].toLowerCase(Locale.ROOT),
-                        pair -> pair[1],
-                        (existing, replacement) -> existing
-                ));
-
-        String fiscalNumber = params.get("fn");
-        String fiscalDocumentNumber = params.get("i");
-        String fiscalSign = params.get("fp");
-        if (fiscalNumber != null && fiscalDocumentNumber != null && fiscalSign != null) {
-            return "fn:" + fiscalNumber + "|i:" + fiscalDocumentNumber + "|fp:" + fiscalSign;
-        }
-
-        return Arrays.stream(qrCodeData.split("&"))
-                .map(String::trim)
-                .filter(part -> !part.isBlank())
-                .sorted()
-                .collect(Collectors.joining("&"));
     }
 
     private BigDecimal centsToRubles(long valueInCents) {

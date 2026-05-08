@@ -1,6 +1,7 @@
 package com.example.financemanager.api;
 
 import com.example.financemanager.dto.fns.FnsReceiptResponse;
+import com.example.financemanager.util.ReceiptQrUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -15,16 +16,14 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
 public class FnsApiClient {
 
+    // Distinguishes epoch milliseconds from epoch seconds while parsing API timestamp fields.
     private static final long EPOCH_MILLIS_THRESHOLD = 9_999_999_999L;
 
     private final WebClient.Builder webClientBuilder;
@@ -126,7 +125,7 @@ public class FnsApiClient {
     }
 
     private FnsReceiptResponse buildFallbackResponseFromQr(String qrCodeData) {
-        Map<String, String> params = parseQrParams(qrCodeData);
+        Map<String, String> params = ReceiptQrUtils.parseQrParams(qrCodeData);
         long totalSumInCents = parseTotalSumToCents(params.get("s"));
         LocalDateTime dateTime = parseReceiptDate(params.get("t"));
         String documentNumber = params.getOrDefault("i", "неизвестен");
@@ -151,20 +150,6 @@ public class FnsApiClient {
         response.setCode(1);
         response.setData(data);
         return response;
-    }
-
-    private Map<String, String> parseQrParams(String qrCodeData) {
-        if (qrCodeData == null || qrCodeData.isBlank()) {
-            return Map.of();
-        }
-        return Arrays.stream(qrCodeData.split("&"))
-                .map(part -> part.split("=", 2))
-                .filter(parts -> parts.length == 2)
-                .collect(Collectors.toMap(
-                        pair -> pair[0].toLowerCase(Locale.ROOT),
-                        pair -> pair[1],
-                        (existing, replacement) -> existing
-                ));
     }
 
     private long parseTotalSumToCents(String rawSum) {
