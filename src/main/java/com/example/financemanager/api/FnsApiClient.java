@@ -25,6 +25,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FnsApiClient {
 
+    private static final long EPOCH_MILLIS_THRESHOLD = 9_999_999_999L;
+
     private final WebClient.Builder webClientBuilder;
 
     @Value("${fns.api.token:}")
@@ -204,7 +206,7 @@ public class FnsApiClient {
 
         if (value instanceof Number number) {
             long timestamp = number.longValue();
-            Instant instant = timestamp > 9_999_999_999L
+            Instant instant = timestamp > EPOCH_MILLIS_THRESHOLD
                     ? Instant.ofEpochMilli(timestamp)
                     : Instant.ofEpochSecond(timestamp);
             return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());

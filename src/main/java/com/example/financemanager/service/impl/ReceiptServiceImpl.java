@@ -96,11 +96,11 @@ public class ReceiptServiceImpl implements ReceiptService {
                         (existing, replacement) -> existing
                 ));
 
-        String fn = params.get("fn");
-        String fd = params.get("i");
-        String fp = params.get("fp");
-        if (fn != null && fd != null && fp != null) {
-            return "fn:" + fn + "|i:" + fd + "|fp:" + fp;
+        String fiscalNumber = params.get("fn");
+        String fiscalDocumentNumber = params.get("i");
+        String fiscalSign = params.get("fp");
+        if (fiscalNumber != null && fiscalDocumentNumber != null && fiscalSign != null) {
+            return "fn:" + fiscalNumber + "|i:" + fiscalDocumentNumber + "|fp:" + fiscalSign;
         }
 
         return Arrays.stream(qrCodeData.split("&"))
