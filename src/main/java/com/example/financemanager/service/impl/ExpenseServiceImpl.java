@@ -83,7 +83,7 @@ public class ExpenseServiceImpl implements ExpenseService {
 
         if (expense.getReceipt() == null) {
             expense.setAmount(expenseDto.getAmount());
-        } else if (expenseDto.getAmount() != null && expense.getAmount().compareTo(expenseDto.getAmount()) != 0) {
+        } else if (expense.getAmount().compareTo(expenseDto.getAmount()) != 0) {
             throw new IllegalStateException("Сумму расхода, добавленного из чека, менять нельзя.");
         }
         expense.setDate(expenseDto.getDate());

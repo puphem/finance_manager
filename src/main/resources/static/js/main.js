@@ -244,7 +244,7 @@
             expenseForm.reset();
             expenseDateInput.value = getTodayDateString();
             expenseAmountInput.readOnly = false;
-            expenseAmountHint.style.display = 'none';
+            expenseAmountHint.classList.add('hidden');
             expenseModal.style.display = 'block';
         });
 
@@ -457,7 +457,7 @@
                     expenseCategorySelect.value = data.category.id;
                     const isReceiptExpense = !!data.receipt;
                     expenseAmountInput.readOnly = isReceiptExpense;
-                    expenseAmountHint.style.display = isReceiptExpense ? 'block' : 'none';
+                    expenseAmountHint.classList.toggle('hidden', !isReceiptExpense);
                     expenseModal.style.display = 'block';
                 } else if (type === 'income') {
                     incomeModalTitle.textContent = 'Редактировать доход';
