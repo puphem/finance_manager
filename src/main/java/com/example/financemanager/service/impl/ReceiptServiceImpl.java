@@ -19,6 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -51,32 +54,41 @@ public class ReceiptServiceImpl implements ReceiptService {
         receipt.setTotalAmount(centsToRubles(receiptJson.getTotalSum()));
         receipt.setReceiptKey(receiptKey);
 
-        if (receiptJson.getItems() == null || receiptJson.getItems().isEmpty()) {
-            Expense expense = new Expense();
-            expense.setDescription("Покупка по чеку");
-            expense.setAmount(receipt.getTotalAmount());
-            expense.setDate(receiptDate);
-            categoryAssignmentService.assignCategory(expense);
-            receipt.addExpense(expense);
-        } else {
-            for (FnsReceiptResponse.Item fnsItem : receiptJson.getItems()) {
-                if (fnsItem == null) {
-                    continue;
-                }
-
-                Expense expense = new Expense();
-                expense.setDescription(fnsItem.getName() == null || fnsItem.getName().isBlank() ? "Позиция из чека" : fnsItem.getName());
-                expense.setAmount(centsToRubles(fnsItem.getSum()));
-                expense.setDate(receiptDate);
-
-                categoryAssignmentService.assignCategory(expense);
-                receipt.addExpense(expense);
-            }
-        }
+        Expense expense = new Expense();
+        String expenseDescription = buildExpenseDescription(receiptJson.getUser(), receiptJson.getItems());
+        expense.setDescription(expenseDescription);
+        expense.setAmount(receipt.getTotalAmount());
+        expense.setDate(receiptDate);
+        categoryAssignmentService.assignCategory(expense);
+        receipt.addExpense(expense);
 
         Receipt savedReceipt = receiptRepository.save(receipt);
 
         return receiptMapper.toResponseDto(savedReceipt);
+    }
+
+    private String buildExpenseDescription(String storeName, List<FnsReceiptResponse.Item> items) {
+        String normalizedStore = storeName == null || storeName.isBlank() ? "магазин" : storeName.trim();
+        if (items == null || items.isEmpty()) {
+            return "Покупка в " + normalizedStore;
+        }
+
+        List<String> itemNames = items.stream()
+                .filter(item -> item != null && item.getName() != null && !item.getName().isBlank())
+                .map(item -> item.getName().trim())
+                .limit(3)
+                .collect(Collectors.toList());
+
+        if (itemNames.isEmpty()) {
+            return "Покупка в " + normalizedStore;
+        }
+
+        if (itemNames.size() == 1) {
+            return itemNames.get(0);
+        }
+
+        String joinedItems = itemNames.stream().map(name -> name.toLowerCase(Locale.ROOT)).collect(Collectors.joining(", "));
+        return "Чек " + normalizedStore + ": " + joinedItems;
     }
 
     private BigDecimal centsToRubles(long valueInCents) {

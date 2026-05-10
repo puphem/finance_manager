@@ -75,6 +75,7 @@
 
         const expenseChartCanvas = getElement('expense-chart');
         let expenseChart = null;
+        let currentPeriod = 'month';
 
         console.log("main.js: Все элементы DOM успешно найдены.");
 
@@ -113,6 +114,24 @@
             }
         };
 
+        const getCategoryIcon = (category) => {
+            if (category?.icon) return category.icon;
+            const categoryName = (category?.name || '').toLowerCase();
+
+            if (categoryName.includes('продукт')) return 'fas fa-shopping-basket';
+            if (categoryName.includes('транспорт')) return 'fas fa-bus';
+            if (categoryName.includes('такси')) return 'fas fa-taxi';
+            if (categoryName.includes('счет')) return 'fas fa-file-invoice-dollar';
+            if (categoryName.includes('кафе') || categoryName.includes('ресторан')) return 'fas fa-utensils';
+            if (categoryName.includes('развлеч')) return 'fas fa-film';
+            if (categoryName.includes('одеж')) return 'fas fa-tshirt';
+            if (categoryName.includes('здоров')) return 'fas fa-heartbeat';
+            if (categoryName.includes('дом')) return 'fas fa-house-user';
+            if (categoryName.includes('питом')) return 'fas fa-paw';
+
+            return 'fas fa-receipt';
+        };
+
         const renderExpenseChart = (summaryData) => {
             if (expenseChart) {
                 expenseChart.destroy();
@@ -144,7 +163,8 @@
             });
         };
 
-        const updateDashboard = async (period = 'month') => {
+        const updateDashboard = async (period = currentPeriod) => {
+            currentPeriod = period;
             try {
                 const summaryRes = await fetch(`${API_URL}/balance/summary?period=${period}`);
                 if (!summaryRes.ok) throw new Error('Не удалось загрузить сводку');
@@ -192,7 +212,7 @@
 
                     if (tx.transactionType === 'expense') {
                         listItem.innerHTML = `
-                            <div style="font-size: 1.5em; margin-right: 15px; color: ${tx.category.color};"><i class="${tx.category.icon || 'fas fa-question-circle'}"></i></div>
+                            <div style="font-size: 1.5em; margin-right: 15px; color: ${tx.category.color || '#7f8c8d'};"><i class="${getCategoryIcon(tx.category)}"></i></div>
                             <div style="width: 100%; display: flex; justify-content: space-between;">
                                 <span><strong>-${tx.amount.toFixed(2)} руб.</strong> - ${tx.description || tx.category.name}</span>
                                 <small style="color: #555;">${date}</small>
@@ -225,9 +245,27 @@
                 });
 
                 if (response.status === 201) {
+                    const scannedReceipt = await response.json();
+                    const scannedExpense = scannedReceipt.expenses && scannedReceipt.expenses.length > 0 ? scannedReceipt.expenses[0] : null;
+                    if (!scannedExpense) {
+                        throw new Error('Сервер не вернул расход из чека.');
+                    }
+
                     receiptModal.style.display = 'none';
-                    const activePeriod = document.querySelector('#filter-buttons .active').dataset.period;
-                    await updateDashboard(activePeriod);
+                    await updateDashboard(currentPeriod);
+
+                    expenseModalTitle.textContent = 'Проверьте расход из чека';
+                    expenseIdInput.value = scannedExpense.id;
+                    expenseAmountInput.value = scannedExpense.amount;
+                    expenseDateInput.value = scannedExpense.date;
+                    expenseDescriptionInput.value = scannedExpense.description || '';
+                    if (scannedExpense.category?.id) {
+                        expenseCategorySelect.value = scannedExpense.category.id;
+                    }
+                    expenseAmountInput.readOnly = true;
+                    expenseAmountHint.classList.remove('hidden');
+                    expenseErrorDiv.textContent = '';
+                    expenseModal.style.display = 'block';
                 } else {
                     const errorData = await response.json();
                     receiptErrorDiv.textContent = `Ошибка сервера: ${errorData.message || 'Неизвестная ошибка'}`;
@@ -311,8 +349,7 @@
 
                 if (response.ok) {
                     expenseModal.style.display = 'none';
-                    const activePeriod = document.querySelector('#filter-buttons .active').dataset.period;
-                    await updateDashboard(activePeriod);
+                    await updateDashboard(currentPeriod);
                 } else {
                     const errorData = await response.json();
                     expenseErrorDiv.textContent = `Ошибка: ${errorData.message || 'Неизвестная ошибка'}`;
@@ -344,8 +381,7 @@
 
                 if (response.ok) {
                     incomeModal.style.display = 'none';
-                    const activePeriod = document.querySelector('#filter-buttons .active').dataset.period;
-                    await updateDashboard(activePeriod);
+                    await updateDashboard(currentPeriod);
                 } else {
                     const errorData = await response.json();
                     incomeErrorDiv.textContent = `Ошибка: ${errorData.message || 'Неизвестная ошибка'}`;
@@ -426,6 +462,7 @@
                 filterButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
                 event.target.classList.add('active');
                 const period = event.target.dataset.period;
+                currentPeriod = period;
                 updateDashboard(period);
             }
         });
@@ -440,7 +477,7 @@
             if (target.classList.contains('delete-btn')) {
                 if (confirm('Вы уверены, что хотите удалить эту запись?')) {
                     await fetch(`${API_URL}/${type}s/${id}`, { method: 'DELETE' });
-                    await updateDashboard(document.querySelector('#filter-buttons .active').dataset.period);
+                    await updateDashboard(currentPeriod);
                 }
             }
 
@@ -491,8 +528,9 @@
         console.log("main.js: Все обработчики событий успешно привязаны.");
 
         renderPalettes();
+        filterButtons.querySelectorAll('button').forEach(btn => btn.classList.toggle('active', btn.dataset.period === currentPeriod));
         await fetchCategories();
-        await updateDashboard('month');
+        await updateDashboard(currentPeriod);
         console.log("main.js: Начальная загрузка данных завершена.");
     }
 

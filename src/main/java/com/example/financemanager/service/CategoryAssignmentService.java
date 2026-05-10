@@ -17,7 +17,11 @@ public class CategoryAssignmentService {
     private final CategoryRepository categoryRepository;
 
     public void assignCategory(Expense expense) {
-        String itemName = expense.getDescription() == null ? "" : expense.getDescription().toLowerCase(Locale.ROOT);
+        expense.setCategory(suggestCategory(expense.getDescription()));
+    }
+
+    public Category suggestCategory(String expenseDescription) {
+        String itemName = expenseDescription == null ? "" : expenseDescription.toLowerCase(Locale.ROOT);
         List<Category> categories = categoryRepository.findAll();
         Category defaultCategory = categories.stream()
                 .filter(category -> "продукты".equalsIgnoreCase(category.getName()))
@@ -56,16 +60,23 @@ public class CategoryAssignmentService {
             }
         }
 
-        expense.setCategory(matchedCategory != null ? matchedCategory : defaultCategory);
+        return matchedCategory != null ? matchedCategory : defaultCategory;
     }
 
     private Map<String, List<String>> buildCategoryKeywords() {
         Map<String, List<String>> keywords = new LinkedHashMap<>();
-        keywords.put("продукт", List.of("молок", "сыр", "хлеб", "яйц", "кефир", "масло", "колбас", "мясо", "овощ", "фрукт", "чай", "кофе", "сахар", "круп", "макарон"));
-        keywords.put("транспорт", List.of("бенз", "дизел", "метро", "такси", "автобус", "троллейбус", "электричк", "парковк", "каршеринг", "топлив"));
+        keywords.put("продукт", List.of("молок", "сыр", "хлеб", "яйц", "кефир", "масло", "колбас", "мясо", "овощ", "фрукт", "чай", "кофе", "сахар", "круп", "макарон", "магазин"));
+        keywords.put("транспорт", List.of("бенз", "дизел", "метро", "такси", "автобус", "троллейбус", "электричк", "парковк", "каршеринг", "топлив", "uber", "yandex go", "яндекс go"));
+        keywords.put("такси", List.of("такси", "uber", "taxi", "yandex go", "яндекс go", "поездка"));
+        keywords.put("кафе", List.of("кафе", "ресторан", "кофейн", "пицц", "бургер", "суши", "доставка"));
+        keywords.put("ресторан", List.of("кафе", "ресторан", "кофейн", "пицц", "бургер", "суши", "доставка"));
         keywords.put("развлеч", List.of("кино", "театр", "игр", "билет", "квест", "музей", "концерт", "подписк"));
-        keywords.put("счет", List.of("жкх", "коммунал", "интернет", "электр", "вода", "газ", "аренд", "штраф", "налог", "капремонт"));
+        keywords.put("счет", List.of("жкх", "коммунал", "интернет", "электр", "вода", "газ", "аренд", "штраф", "налог", "капремонт", "мобильн", "связь"));
+        keywords.put("дом", List.of("ремонт", "дом", "мебел", "ламп", "хозтовар", "быт"));
+        keywords.put("образов", List.of("курс", "школ", "универс", "книг", "обучен", "репетитор"));
         keywords.put("одеж", List.of("куртк", "футболк", "брюк", "кроссовк", "ботинк", "джинс"));
+        keywords.put("красот", List.of("салон", "маникюр", "парикмах", "космет"));
+        keywords.put("питом", List.of("вет", "корм", "зоомаг", "питом"));
         keywords.put("здоров", List.of("аптек", "лекар", "витамин", "клиник", "мед"));
         return keywords;
     }
