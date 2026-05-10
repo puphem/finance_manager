@@ -45,6 +45,7 @@
         const expenseModalTitle = getElement('expense-modal-title');
         const expenseDescriptionInput = getElement('expense-description');
         const expenseAmountInput = getElement('expense-amount');
+        const expenseAmountHint = getElement('expense-amount-hint');
 
         const categoryModal = getElement('category-modal');
         const addCategoryLink = getElement('add-category-link');
@@ -179,8 +180,12 @@
                     const date = new Date(tx.date).toLocaleDateString('ru-RU');
 
                     let actions = '';
-                    if (tx.transactionType === 'expense' && !tx.receipt) {
-                        actions = `<div class="transaction-actions"><button class="edit-btn" data-id="${tx.id}" data-type="expense">✏️</button><button class="delete-btn" data-id="${tx.id}" data-type="expense">🗑️</button></div>`;
+                    if (tx.transactionType === 'expense') {
+                        const expenseActionButtons = [`<button class="edit-btn" data-id="${tx.id}" data-type="expense">✏️</button>`];
+                        if (!tx.receipt) {
+                            expenseActionButtons.push(`<button class="delete-btn" data-id="${tx.id}" data-type="expense">🗑️</button>`);
+                        }
+                        actions = `<div class="transaction-actions">${expenseActionButtons.join('')}</div>`;
                     } else if (tx.transactionType === 'income') {
                         actions = `<div class="transaction-actions"><button class="edit-btn" data-id="${tx.id}" data-type="income">✏️</button><button class="delete-btn" data-id="${tx.id}" data-type="income">🗑️</button></div>`;
                     }
@@ -238,6 +243,8 @@
             expenseErrorDiv.textContent = '';
             expenseForm.reset();
             expenseDateInput.value = getTodayDateString();
+            expenseAmountInput.readOnly = false;
+            expenseAmountHint.style.display = 'none';
             expenseModal.style.display = 'block';
         });
 
@@ -448,6 +455,9 @@
                     expenseDateInput.value = data.date;
                     expenseDescriptionInput.value = data.description;
                     expenseCategorySelect.value = data.category.id;
+                    const isReceiptExpense = !!data.receipt;
+                    expenseAmountInput.readOnly = isReceiptExpense;
+                    expenseAmountHint.style.display = isReceiptExpense ? 'block' : 'none';
                     expenseModal.style.display = 'block';
                 } else if (type === 'income') {
                     incomeModalTitle.textContent = 'Редактировать доход';

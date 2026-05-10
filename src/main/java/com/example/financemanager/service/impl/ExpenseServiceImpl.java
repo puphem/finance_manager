@@ -65,6 +65,14 @@ public class ExpenseServiceImpl implements ExpenseService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ExpenseResponseDto getExpenseById(Long id) {
+        Expense expense = expenseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Расход с ID " + id + " не найден."));
+        return expenseMapper.toResponseDto(expense);
+    }
+
+    @Override
     @Transactional
     public ExpenseResponseDto updateExpense(Long id, ExpenseRequestDto expenseDto) {
         Expense expense = expenseRepository.findById(id)
@@ -73,7 +81,11 @@ public class ExpenseServiceImpl implements ExpenseService {
         Category category = categoryRepository.findById(expenseDto.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Категория с ID " + expenseDto.getCategoryId() + " не найдена."));
 
-        expense.setAmount(expenseDto.getAmount());
+        if (expense.getReceipt() == null) {
+            expense.setAmount(expenseDto.getAmount());
+        } else if (expenseDto.getAmount() != null && expense.getAmount().compareTo(expenseDto.getAmount()) != 0) {
+            throw new IllegalStateException("Сумму расхода, добавленного из чека, менять нельзя.");
+        }
         expense.setDate(expenseDto.getDate());
         expense.setDescription(expenseDto.getDescription());
         expense.setCategory(category);

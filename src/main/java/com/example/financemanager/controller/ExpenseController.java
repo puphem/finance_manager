@@ -31,6 +31,11 @@ public class ExpenseController {
         return ResponseEntity.ok(expenseService.getAllExpenses(period));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ExpenseResponseDto> getExpenseById(@PathVariable Long id) {
+        return ResponseEntity.ok(expenseService.getExpenseById(id));
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<ExpenseResponseDto> updateExpense(@PathVariable Long id, @Valid @RequestBody ExpenseRequestDto expenseDto) {
         return ResponseEntity.ok(expenseService.updateExpense(id, expenseDto));

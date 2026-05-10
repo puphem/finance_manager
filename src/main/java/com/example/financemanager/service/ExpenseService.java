@@ -9,6 +9,7 @@ import java.util.List;
 public interface ExpenseService {
     ExpenseResponseDto createExpense(ExpenseRequestDto expenseDto);
     List<ExpenseResponseDto> getAllExpenses(String period);
+    ExpenseResponseDto getExpenseById(Long id);
     ExpenseResponseDto updateExpense(Long id, ExpenseRequestDto expenseDto);
     void deleteExpense(Long id);
     List<CategoryExpenseDto> getCategoryExpenseSummary(String period);
