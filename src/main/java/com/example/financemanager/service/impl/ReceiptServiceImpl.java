@@ -20,7 +20,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
@@ -87,7 +86,7 @@ public class ReceiptServiceImpl implements ReceiptService {
             return itemNames.get(0);
         }
 
-        String joinedItems = itemNames.stream().map(name -> name.toLowerCase(Locale.ROOT)).collect(Collectors.joining(", "));
+        String joinedItems = String.join(", ", itemNames);
         return "Чек " + normalizedStore + ": " + joinedItems;
     }
 
