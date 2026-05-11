@@ -2,6 +2,7 @@ package com.example.financemanager.service;
 
 import com.example.financemanager.entity.Category;
 import com.example.financemanager.entity.Expense;
+import com.example.financemanager.entity.User;
 import com.example.financemanager.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,13 +17,13 @@ import java.util.Map;
 public class CategoryAssignmentService {
     private final CategoryRepository categoryRepository;
 
-    public void assignCategory(Expense expense) {
-        expense.setCategory(suggestCategory(expense.getDescription()));
+    public void assignCategory(Expense expense, User user) {
+        expense.setCategory(suggestCategory(expense.getDescription(), user));
     }
 
-    public Category suggestCategory(String expenseDescription) {
+    public Category suggestCategory(String expenseDescription, User user) {
         String itemName = expenseDescription == null ? "" : expenseDescription.toLowerCase(Locale.ROOT);
-        List<Category> categories = categoryRepository.findAll();
+        List<Category> categories = categoryRepository.findAllByUser(user);
         Category defaultCategory = categories.stream()
                 .filter(category -> "продукты".equalsIgnoreCase(category.getName()))
                 .findFirst()

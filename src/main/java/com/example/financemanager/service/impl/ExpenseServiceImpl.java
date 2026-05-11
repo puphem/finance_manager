@@ -5,10 +5,12 @@ import com.example.financemanager.dto.ExpenseRequestDto;
 import com.example.financemanager.dto.ExpenseResponseDto;
 import com.example.financemanager.entity.Category;
 import com.example.financemanager.entity.Expense;
+import com.example.financemanager.entity.User;
 import com.example.financemanager.exception.ResourceNotFoundException;
 import com.example.financemanager.mapper.ExpenseMapper;
 import com.example.financemanager.repository.CategoryRepository;
 import com.example.financemanager.repository.ExpenseRepository;
+import com.example.financemanager.service.CurrentUserResolver;
 import com.example.financemanager.service.ExpenseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,15 +29,19 @@ public class ExpenseServiceImpl implements ExpenseService {
     private final ExpenseRepository expenseRepository;
     private final CategoryRepository categoryRepository;
     private final ExpenseMapper expenseMapper;
+    private final CurrentUserResolver currentUserResolver;
 
     @Override
     @Transactional
     public ExpenseResponseDto createExpense(ExpenseRequestDto expenseDto) {
+        User user = currentUserResolver.getCurrentUser();
         Category category = categoryRepository.findById(expenseDto.getCategoryId())
+                .filter(c -> c.getUser().getId().equals(user.getId()))
                 .orElseThrow(() -> new ResourceNotFoundException("Категория с ID " + expenseDto.getCategoryId() + " не найдена."));
 
         Expense expense = expenseMapper.toEntity(expenseDto);
         expense.setCategory(category);
+        expense.setUser(user);
 
         expenseRepository.save(expense);
         return expenseMapper.toResponseDto(expense);
@@ -44,6 +50,7 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Override
     @Transactional(readOnly = true)
     public List<ExpenseResponseDto> getAllExpenses(String period) {
+        User user = currentUserResolver.getCurrentUser();
         LocalDate today = LocalDate.now();
         LocalDate startDate;
 
@@ -54,12 +61,12 @@ public class ExpenseServiceImpl implements ExpenseService {
         } else if ("month".equalsIgnoreCase(period)) {
             startDate = today.with(TemporalAdjusters.firstDayOfMonth());
         } else {
-            return expenseRepository.findAllByOrderByDateDesc().stream()
+            return expenseRepository.findAllByUserOrderByDateDesc(user).stream()
                     .map(expenseMapper::toResponseDto)
                     .collect(Collectors.toList());
         }
 
-        return expenseRepository.findByDateBetweenOrderByDateDesc(startDate, today).stream()
+        return expenseRepository.findByUserAndDateBetweenOrderByDateDesc(user, startDate, today).stream()
                 .map(expenseMapper::toResponseDto)
                 .collect(Collectors.toList());
     }
@@ -67,7 +74,8 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Override
     @Transactional(readOnly = true)
     public ExpenseResponseDto getExpenseById(Long id) {
-        Expense expense = expenseRepository.findById(id)
+        User user = currentUserResolver.getCurrentUser();
+        Expense expense = expenseRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Расход с ID " + id + " не найден."));
         return expenseMapper.toResponseDto(expense);
     }
@@ -75,10 +83,12 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Override
     @Transactional
     public ExpenseResponseDto updateExpense(Long id, ExpenseRequestDto expenseDto) {
-        Expense expense = expenseRepository.findById(id)
+        User user = currentUserResolver.getCurrentUser();
+        Expense expense = expenseRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("Расход с ID " + id + " не найден."));
 
         Category category = categoryRepository.findById(expenseDto.getCategoryId())
+                .filter(c -> c.getUser().getId().equals(user.getId()))
                 .orElseThrow(() -> new ResourceNotFoundException("Категория с ID " + expenseDto.getCategoryId() + " не найдена."));
 
         if (expense.getReceipt() == null) {
@@ -97,7 +107,8 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Override
     @Transactional
     public void deleteExpense(Long id) {
-        if (!expenseRepository.existsById(id)) {
+        User user = currentUserResolver.getCurrentUser();
+        if (!expenseRepository.existsByIdAndUser(id, user)) {
             throw new ResourceNotFoundException("Расход с ID " + id + " не найден.");
         }
         expenseRepository.deleteById(id);
@@ -106,6 +117,7 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Override
     @Transactional(readOnly = true)
     public List<CategoryExpenseDto> getCategoryExpenseSummary(String period) {
+        User user = currentUserResolver.getCurrentUser();
         LocalDate today = LocalDate.now();
         LocalDate startDate;
         LocalDate endDate = today;
@@ -121,6 +133,6 @@ public class ExpenseServiceImpl implements ExpenseService {
             endDate = LocalDate.of(2100, 1, 1);
         }
 
-        return expenseRepository.findCategoryExpensesByDateBetween(startDate, endDate);
+        return expenseRepository.findCategoryExpensesByUserAndDateBetween(user, startDate, endDate);
     }
 }

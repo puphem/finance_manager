@@ -6,10 +6,12 @@ import com.example.financemanager.dto.ScanReceiptRequestDto;
 import com.example.financemanager.dto.fns.FnsReceiptResponse;
 import com.example.financemanager.entity.Expense;
 import com.example.financemanager.entity.Receipt;
+import com.example.financemanager.entity.User;
 import com.example.financemanager.exception.DuplicateResourceException;
 import com.example.financemanager.mapper.ReceiptMapper;
 import com.example.financemanager.repository.ReceiptRepository;
 import com.example.financemanager.service.CategoryAssignmentService;
+import com.example.financemanager.service.CurrentUserResolver;
 import com.example.financemanager.service.ReceiptService;
 import com.example.financemanager.util.ReceiptQrUtils;
 import lombok.RequiredArgsConstructor;
@@ -30,12 +32,14 @@ public class ReceiptServiceImpl implements ReceiptService {
     private final ReceiptRepository receiptRepository;
     private final CategoryAssignmentService categoryAssignmentService;
     private final ReceiptMapper receiptMapper;
+    private final CurrentUserResolver currentUserResolver;
 
     @Override
     @Transactional
     public ReceiptResponseDto processAndSaveReceipt(ScanReceiptRequestDto requestDto) {
+        User user = currentUserResolver.getCurrentUser();
         String receiptKey = ReceiptQrUtils.buildReceiptKey(requestDto.getQrCodeData());
-        if (receiptRepository.existsByReceiptKey(receiptKey)) {
+        if (receiptRepository.existsByReceiptKeyAndUser(receiptKey, user)) {
             throw new DuplicateResourceException("Этот чек уже был добавлен в траты.");
         }
 
@@ -52,13 +56,15 @@ public class ReceiptServiceImpl implements ReceiptService {
         receipt.setReceiptDate(receiptDate);
         receipt.setTotalAmount(centsToRubles(receiptJson.getTotalSum()));
         receipt.setReceiptKey(receiptKey);
+        receipt.setUser(user);
 
         Expense expense = new Expense();
         String expenseDescription = buildExpenseDescription(receiptJson.getUser(), receiptJson.getItems());
         expense.setDescription(expenseDescription);
         expense.setAmount(receipt.getTotalAmount());
         expense.setDate(receiptDate);
-        categoryAssignmentService.assignCategory(expense);
+        expense.setUser(user);
+        categoryAssignmentService.assignCategory(expense, user);
         receipt.addExpense(expense);
 
         Receipt savedReceipt = receiptRepository.save(receipt);

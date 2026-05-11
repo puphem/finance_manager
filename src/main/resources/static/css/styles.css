@@ -6,6 +6,101 @@ body {
     padding: 20px;
 }
 
+/* ========== AUTH PAGE ========== */
+#auth-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 80vh;
+}
+
+.auth-card {
+    background: #fff;
+    padding: 35px 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    width: 100%;
+    max-width: 400px;
+}
+
+.auth-card h1 {
+    text-align: center;
+    margin-top: 0;
+    color: #2c3e50;
+    border: none;
+    font-size: 1.8em;
+    margin-bottom: 25px;
+}
+
+.auth-tabs {
+    display: flex;
+    margin-bottom: 25px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #ddd;
+}
+
+.auth-tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    background: #f4f7f9;
+    font-weight: 600;
+    color: #666;
+    transition: background 0.2s, color 0.2s;
+    border: none;
+    font-size: 15px;
+}
+
+.auth-tab.active {
+    background: #3498db;
+    color: #fff;
+}
+
+.auth-error {
+    color: #e74c3c;
+    font-size: 13px;
+    margin-top: -8px;
+    margin-bottom: 10px;
+    min-height: 18px;
+}
+
+/* ========== APP HEADER ========== */
+#app-page {
+    display: none;
+}
+
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 10px 15px;
+    background: #2c3e50;
+    border-radius: 8px;
+    color: #fff;
+}
+
+.app-header span {
+    font-size: 0.95em;
+    opacity: 0.8;
+}
+
+#logout-btn {
+    background: transparent;
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.5);
+    padding: 6px 14px;
+    font-size: 13px;
+    border-radius: 4px;
+}
+
+#logout-btn:hover {
+    background: rgba(255,255,255,0.15);
+}
+
+/* ========== MAIN CONTAINER ========== */
 .container {
     width: 90%;
     max-width: 800px;
@@ -166,3 +261,35 @@ li {
 .hidden {
     display: none;
 }
+
+.error-message {
+    color: #e74c3c;
+    margin-top: 8px;
+    font-size: 13px;
+}
+
+#filter-buttons button {
+    margin-left: 4px;
+    padding: 6px 12px;
+    font-size: 13px;
+    background-color: #7f8c8d;
+}
+
+#filter-buttons button.active {
+    background-color: #2980b9;
+}
+
+.transaction-actions {
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.transaction-actions button {
+    padding: 4px 8px;
+    font-size: 13px;
+    margin-left: 4px;
+}
+
+.edit-btn { background-color: #f39c12; }
+.delete-btn { background-color: #e74c3c; }
+
