@@ -6,7 +6,7 @@ import com.example.financemanager.entity.Expense;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "spring", uses = {CategoryMapper.class})
+@Mapper(componentModel = "spring", uses = {CategoryMapper.class, SubcategoryMapper.class})
 public interface ExpenseMapper {
 
     @Mapping(target = "id", ignore = true)

@@ -83,8 +83,7 @@ public class FnsApiClient {
             return null;
         }
 
-        Map<?, ?> dataMap = asMap(responseMap.get("data"));
-        Map<?, ?> receiptJsonMap = dataMap == null ? null : asMap(dataMap.get("json"));
+        Map<?, ?> receiptJsonMap = extractReceiptJsonMap(responseMap);
         if (receiptJsonMap == null || receiptJsonMap.isEmpty()) {
             return null;
         }
@@ -102,6 +101,39 @@ public class FnsApiClient {
         response.setCode((int) asLong(responseMap.get("code"), 1L));
         response.setData(data);
         return response;
+    }
+
+    private Map<?, ?> extractReceiptJsonMap(Map<?, ?> responseMap) {
+        Map<?, ?> dataMap = asMap(responseMap.get("data"));
+        if (dataMap != null) {
+            Map<?, ?> json = asMap(dataMap.get("json"));
+            if (json != null && !json.isEmpty()) {
+                return json;
+            }
+
+            Map<?, ?> receipt = asMap(dataMap.get("receipt"));
+            if (receipt != null && !receipt.isEmpty()) {
+                return receipt;
+            }
+
+            Map<?, ?> ticket = asMap(dataMap.get("ticket"));
+            Map<?, ?> document = ticket == null ? null : asMap(ticket.get("document"));
+            Map<?, ?> nestedReceipt = document == null ? null : asMap(document.get("receipt"));
+            if (nestedReceipt != null && !nestedReceipt.isEmpty()) {
+                return nestedReceipt;
+            }
+        }
+
+        Map<?, ?> topLevelJson = asMap(responseMap.get("json"));
+        if (topLevelJson != null && !topLevelJson.isEmpty()) {
+            return topLevelJson;
+        }
+
+        Map<?, ?> topLevelReceipt = asMap(responseMap.get("receipt"));
+        if (topLevelReceipt != null && !topLevelReceipt.isEmpty()) {
+            return topLevelReceipt;
+        }
+        return null;
     }
 
     private List<FnsReceiptResponse.Item> extractItems(Object itemsObj) {
@@ -135,7 +167,7 @@ public class FnsApiClient {
         String documentNumber = params.getOrDefault("i", "неизвестен");
 
         FnsReceiptResponse.Item item = new FnsReceiptResponse.Item(
-                "Покупка по чеку №" + documentNumber,
+                "Товар из чека №" + documentNumber,
                 totalSumInCents,
                 1.0,
                 totalSumInCents

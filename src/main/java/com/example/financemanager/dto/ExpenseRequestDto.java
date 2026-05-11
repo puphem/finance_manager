@@ -18,6 +18,8 @@ public class ExpenseRequestDto {
     @NotNull(message = "ID категории не может быть пустым")
     private Long categoryId;
 
+    private Long subcategoryId;
+
     private String description;
 
     @NotNull(message = "Дата не может быть пустой")

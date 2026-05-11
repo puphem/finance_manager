@@ -14,7 +14,7 @@ public class ExpenseResponseDto {
     private LocalDate date;
     private String description;
     private CategoryResponseDto category;
+    private SubcategoryResponseDto subcategory;
 
-    // НОВОЕ ПОЛЕ
     private ReceiptInfoInExpenseDto receipt;
 }

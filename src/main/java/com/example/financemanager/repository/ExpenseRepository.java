@@ -1,6 +1,7 @@
 package com.example.financemanager.repository;
 
 import com.example.financemanager.dto.CategoryExpenseDto;
+import com.example.financemanager.dto.SubcategoryExpenseDto;
 import com.example.financemanager.entity.Expense;
 import com.example.financemanager.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -24,13 +25,25 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long>, JpaSpec
     @Query("SELECT COALESCE(SUM(e.amount), 0) FROM Expense e WHERE e.user = :user AND e.date >= :startDate AND e.date <= :endDate")
     BigDecimal sumAmountByUserAndDateBetween(@Param("user") User user, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
-    @Query("SELECT new com.example.financemanager.dto.CategoryExpenseDto(e.category.name, e.category.color, SUM(e.amount)) " +
+    @Query("SELECT new com.example.financemanager.dto.CategoryExpenseDto(e.category.id, e.category.name, e.category.color, SUM(e.amount)) " +
             "FROM Expense e " +
             "WHERE e.user = :user AND e.date >= :startDate AND e.date <= :endDate " +
-            "GROUP BY e.category.name, e.category.color " +
+            "GROUP BY e.category.id, e.category.name, e.category.color " +
             "ORDER BY SUM(e.amount) DESC")
     List<CategoryExpenseDto> findCategoryExpensesByUserAndDateBetween(
             @Param("user") User user,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    @Query("SELECT new com.example.financemanager.dto.SubcategoryExpenseDto(COALESCE(e.subcategory.name, 'Без подкатегории'), e.category.color, SUM(e.amount)) " +
+            "FROM Expense e " +
+            "WHERE e.user = :user AND e.category.id = :categoryId AND e.date >= :startDate AND e.date <= :endDate " +
+            "GROUP BY e.subcategory.name, e.category.color " +
+            "ORDER BY SUM(e.amount) DESC")
+    List<SubcategoryExpenseDto> findSubcategoryExpensesByUserAndCategoryAndDateBetween(
+            @Param("user") User user,
+            @Param("categoryId") Long categoryId,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
     );

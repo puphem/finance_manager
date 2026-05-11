@@ -2,8 +2,10 @@ package com.example.financemanager.service;
 
 import com.example.financemanager.entity.Category;
 import com.example.financemanager.entity.Expense;
+import com.example.financemanager.entity.Subcategory;
 import com.example.financemanager.entity.User;
 import com.example.financemanager.repository.CategoryRepository;
+import com.example.financemanager.repository.SubcategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -16,9 +18,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CategoryAssignmentService {
     private final CategoryRepository categoryRepository;
+    private final SubcategoryRepository subcategoryRepository;
 
     public void assignCategory(Expense expense, User user) {
-        expense.setCategory(suggestCategory(expense.getDescription(), user));
+        Category category = suggestCategory(expense.getDescription(), user);
+        expense.setCategory(category);
+        expense.setSubcategory(suggestSubcategory(expense.getDescription(), category, user));
     }
 
     public Category suggestCategory(String expenseDescription, User user) {
@@ -64,6 +69,53 @@ public class CategoryAssignmentService {
         return matchedCategory != null ? matchedCategory : defaultCategory;
     }
 
+    public Subcategory suggestSubcategory(String expenseDescription, Category category, User user) {
+        if (category == null) {
+            return null;
+        }
+
+        List<Subcategory> subcategories = subcategoryRepository.findByCategoryIdAndCategoryUser(category.getId(), user);
+        if (subcategories.isEmpty()) {
+            return null;
+        }
+
+        String description = expenseDescription == null ? "" : expenseDescription.toLowerCase(Locale.ROOT);
+        Map<String, List<String>> keywordBySubcategory = buildSubcategoryKeywords();
+
+        Subcategory matchedSubcategory = null;
+        int bestScore = 0;
+
+        for (Subcategory subcategory : subcategories) {
+            String subcategoryName = subcategory.getName() == null ? "" : subcategory.getName().toLowerCase(Locale.ROOT);
+            List<String> keywords = keywordBySubcategory.getOrDefault(subcategoryName, List.of());
+            int score = 0;
+
+            for (String keyword : keywords) {
+                if (description.contains(keyword)) {
+                    score++;
+                }
+            }
+
+            if (score == 0 && !subcategoryName.isBlank() && description.contains(subcategoryName)) {
+                score = 1;
+            }
+
+            if (score > bestScore) {
+                bestScore = score;
+                matchedSubcategory = subcategory;
+            }
+        }
+
+        if (matchedSubcategory != null) {
+            return matchedSubcategory;
+        }
+
+        return subcategories.stream()
+                .filter(subcategory -> "прочее".equalsIgnoreCase(subcategory.getName()))
+                .findFirst()
+                .orElse(subcategories.get(0));
+    }
+
     private Map<String, List<String>> buildCategoryKeywords() {
         Map<String, List<String>> keywords = new LinkedHashMap<>();
         keywords.put("продукт", List.of("молок", "сыр", "хлеб", "яйц", "кефир", "масло", "колбас", "мясо", "овощ", "фрукт", "чай", "кофе", "сахар", "круп", "макарон", "магазин"));
@@ -79,6 +131,76 @@ public class CategoryAssignmentService {
         keywords.put("красот", List.of("салон", "маникюр", "парикмах", "космет"));
         keywords.put("питом", List.of("вет", "корм", "зоомаг", "питом"));
         keywords.put("здоров", List.of("аптек", "лекар", "витамин", "клиник", "мед"));
+        return keywords;
+    }
+
+    private Map<String, List<String>> buildSubcategoryKeywords() {
+        Map<String, List<String>> keywords = new LinkedHashMap<>();
+        keywords.put("напитки", List.of("вода", "сок", "лимонад", "чай", "кофе", "энергетик", "квас"));
+        keywords.put("мясо и рыба", List.of("мяс", "кур", "говяд", "свин", "рыб", "лосос", "тунец"));
+        keywords.put("молочные продукты", List.of("молок", "сыр", "йогурт", "кефир", "творог", "сметан"));
+        keywords.put("сладости", List.of("шоколад", "конфет", "печень", "торт", "морожен", "батончик"));
+        keywords.put("овощи и фрукты", List.of("яблок", "банан", "апельсин", "помидор", "огурец", "картоф", "фрукт", "овощ"));
+        keywords.put("бытовые продукты", List.of("порош", "моющ", "губк", "мыло", "салфет", "туалет", "хоз"));
+
+        keywords.put("общественный транспорт", List.of("метро", "автобус", "трамвай", "троллейбус", "электричк"));
+        keywords.put("топливо", List.of("бенз", "дизел", "азс", "топлив"));
+        keywords.put("парковка", List.of("парковк", "паркинг"));
+        keywords.put("каршеринг", List.of("каршеринг", "delimobil", "belka", "youdrive"));
+        keywords.put("обслуживание авто", List.of("шиномонтаж", "мойка", "то", "масло", "ремонт авто"));
+
+        keywords.put("поездки по городу", List.of("такси", "uber", "yandex go", "яндекс go"));
+        keywords.put("межгород", List.of("межгород", "поездка между", "дальняя поездка"));
+        keywords.put("доставка", List.of("доставка", "courier", "курьер"));
+        keywords.put("комфорт/бизнес", List.of("comfort", "business", "комфорт", "бизнес"));
+
+        keywords.put("кино и сериалы", List.of("кино", "cinema", "ivi", "okko", "кинопоиск"));
+        keywords.put("игры", List.of("steam", "playstation", "xbox", "игр"));
+        keywords.put("концерты", List.of("концерт", "билет"));
+        keywords.put("хобби", List.of("хобби", "настольн", "музей", "театр", "квест"));
+        keywords.put("подписки", List.of("подписк", "subscription", "youtube premium", "spotify"));
+
+        keywords.put("жкх", List.of("жкх", "коммунал", "вода", "газ", "электр"));
+        keywords.put("интернет и связь", List.of("интернет", "связь", "мобильн", "оператор"));
+        keywords.put("налоги и штрафы", List.of("налог", "штраф", "госпошлин"));
+        keywords.put("аренда/ипотека", List.of("аренд", "ипотек", "rent"));
+
+        keywords.put("ремонт", List.of("ремонт", "краск", "инструмент", "дрель"));
+        keywords.put("мебель", List.of("мебел", "диван", "стул", "шкаф"));
+        keywords.put("бытовая химия", List.of("порош", "чист", "химия", "моющ"));
+        keywords.put("техника", List.of("пылесос", "чайник", "микроволн", "техник"));
+        keywords.put("хозтовары", List.of("хозтовар", "ламп", "батарейк", "удлинитель"));
+
+        keywords.put("аптека", List.of("аптек", "лекар", "таблет", "витамин"));
+        keywords.put("врачи и анализы", List.of("клиник", "анализ", "врач", "узи"));
+        keywords.put("стоматология", List.of("стомат", "зуб", "брекет"));
+        keywords.put("спорт и здоровье", List.of("фитнес", "спортзал", "йога", "бассейн"));
+
+        keywords.put("повседневная одежда", List.of("футболк", "рубашк", "брюк", "джинс"));
+        keywords.put("обувь", List.of("кроссовк", "ботинк", "туфл", "обув"));
+        keywords.put("аксессуары", List.of("ремень", "сумк", "рюкзак", "шапк"));
+        keywords.put("спорттовары", List.of("спорт", "форма", "ракетк", "мяч"));
+
+        keywords.put("кафе", List.of("кафе", "кофейн"));
+        keywords.put("рестораны", List.of("ресторан", "бар", "гриль"));
+        keywords.put("фастфуд", List.of("бургер", "шаверм", "пицц", "fast"));
+        keywords.put("доставка еды", List.of("доставка", "delivery", "самокат", "яндекс еда"));
+        keywords.put("кофейни", List.of("латте", "капучино", "эспрессо", "кофе"));
+
+        keywords.put("курсы", List.of("курс", "обучен", "интенсив"));
+        keywords.put("книги", List.of("книг", "учебник"));
+        keywords.put("репетиторы", List.of("репетитор", "урок"));
+        keywords.put("онлайн-платформы", List.of("udemy", "coursera", "stepik", "skillbox"));
+
+        keywords.put("корм", List.of("корм", "лакомств"));
+        keywords.put("ветклиника", List.of("вет", "ветеринар", "прививк"));
+        keywords.put("аксессуары для питомцев", List.of("поводок", "лоток", "наполнитель", "миска"));
+        keywords.put("груминг", List.of("грум", "стрижк", "уход за питомцем"));
+
+        keywords.put("косметика", List.of("космет", "крем", "маск"));
+        keywords.put("салон", List.of("салон", "парикмах", "маникюр"));
+        keywords.put("уход за собой", List.of("уход", "spa", "массаж"));
+        keywords.put("парфюмерия", List.of("духи", "парфюм"));
         return keywords;
     }
 }

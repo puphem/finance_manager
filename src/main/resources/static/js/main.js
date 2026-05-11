@@ -23,7 +23,7 @@
     const logout = () => {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USERNAME_KEY);
-        showAuth();
+        window.location.reload();
     };
 
     const showAuth = () => {
@@ -166,6 +166,7 @@
         const expenseModal = getElement('expense-modal');
         const expenseForm = getElement('expense-form');
         const expenseCategorySelect = getElement('expense-category');
+        const expenseSubcategorySelect = getElement('expense-subcategory');
         const expenseErrorDiv = getElement('expense-error-message');
         const expenseDateInput = getElement('expense-date');
         const expenseIdInput = getElement('expense-id');
@@ -205,6 +206,9 @@
         const expenseChartCanvas = getElement('expense-chart');
         let expenseChart = null;
         let currentPeriod = 'month';
+        let currentCategorySummary = [];
+        let categoryNameById = new Map();
+        let categoryById = new Map();
 
         let selectedIcon = ICONS[0];
         let selectedColor = COLORS[0];
@@ -221,11 +225,33 @@
             iconPreview.style.color = selectedColor;
         };
 
+        const populateSubcategories = (selectedSubcategoryId = '') => {
+            const selectedCategory = categoryById.get(Number(expenseCategorySelect.value));
+            const subcategories = selectedCategory?.subcategories || [];
+
+            expenseSubcategorySelect.innerHTML = '';
+            const emptyOption = document.createElement('option');
+            emptyOption.value = '';
+            emptyOption.textContent = 'Без подкатегории';
+            expenseSubcategorySelect.appendChild(emptyOption);
+
+            subcategories.forEach(subcategory => {
+                const option = document.createElement('option');
+                option.value = subcategory.id;
+                option.textContent = subcategory.name;
+                expenseSubcategorySelect.appendChild(option);
+            });
+
+            expenseSubcategorySelect.value = selectedSubcategoryId ? String(selectedSubcategoryId) : '';
+        };
+
         const fetchCategories = async () => {
             try {
                 const response = await apiFetch(`${API_URL}/categories`);
                 if (!response.ok) throw new Error('Не удалось загрузить категории');
                 const categories = await response.json();
+                categoryById = new Map(categories.map(category => [Number(category.id), category]));
+                categoryNameById = new Map(categories.map(category => [Number(category.id), category.name]));
 
                 const currentCategoryValue = expenseCategorySelect.value;
                 expenseCategorySelect.innerHTML = '';
@@ -238,6 +264,7 @@
                 if (currentCategoryValue) {
                     expenseCategorySelect.value = currentCategoryValue;
                 }
+                populateSubcategories();
             } catch (error) {
                 expenseErrorDiv.textContent = error.message;
             }
@@ -259,15 +286,53 @@
             return 'fas fa-receipt';
         };
 
-        const renderExpenseChart = (summaryData) => {
+        const renderExpenseChart = (summaryData, mode, titleText) => {
             if (expenseChart) expenseChart.destroy();
-            const labels = summaryData.map(item => item.categoryName);
+            const labels = summaryData.map(item => mode === 'category' ? item.categoryName : item.subcategoryName);
             const data = summaryData.map(item => item.totalAmount);
-            const colors = summaryData.map(item => item.categoryColor);
+            const colors = summaryData.map(item => item.categoryColor || '#95a5a6');
             expenseChart = new Chart(expenseChartCanvas, {
                 type: 'doughnut',
                 data: { labels, datasets: [{ label: 'Расходы по категориям', data, backgroundColor: colors, borderColor: '#fff', borderWidth: 2 }] },
-                options: { responsive: true, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Расходы по категориям' } } }
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'top' },
+                        title: { display: true, text: titleText }
+                    },
+                    onClick: async (_, elements) => {
+                        if (mode === 'category' && elements.length > 0) {
+                            const item = summaryData[elements[0].index];
+                            if (!item?.categoryId) return;
+                            const response = await apiFetch(`${API_URL}/expenses/summary-by-subcategory?categoryId=${item.categoryId}&period=${currentPeriod}`);
+                            if (!response.ok) return;
+                            const subcategorySummary = await response.json();
+                            const categoryName = categoryNameById.get(Number(item.categoryId)) || item.categoryName;
+                            renderExpenseChart(subcategorySummary, 'subcategory', `Подкатегории: ${categoryName}`);
+                            return;
+                        }
+
+                        if (mode === 'subcategory' && elements.length === 0) {
+                            renderExpenseChart(currentCategorySummary, 'category', 'Расходы по категориям');
+                        }
+                    }
+                },
+                plugins: [{
+                    id: 'centerReturnHint',
+                    afterDraw(chart) {
+                        if (mode !== 'subcategory') return;
+                        const {ctx, chartArea: {left, right, top, bottom}} = chart;
+                        const centerX = (left + right) / 2;
+                        const centerY = (top + bottom) / 2;
+                        ctx.save();
+                        ctx.font = '600 14px Arial';
+                        ctx.fillStyle = '#666';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('← Назад', centerX, centerY);
+                        ctx.restore();
+                    }
+                }]
             });
         };
 
@@ -285,7 +350,8 @@
 
                 const chartRes = await apiFetch(`${API_URL}/expenses/summary-by-category?period=${period}`);
                 if (!chartRes.ok) throw new Error('Не удалось загрузить данные для диаграммы');
-                renderExpenseChart(await chartRes.json());
+                currentCategorySummary = await chartRes.json();
+                renderExpenseChart(currentCategorySummary, 'category', 'Расходы по категориям');
 
                 const [expenseRes, incomeRes] = await Promise.all([
                     apiFetch(`${API_URL}/expenses?period=${period}`),
@@ -314,10 +380,13 @@
                         actions = `<div class="transaction-actions"><button class="edit-btn" data-id="${tx.id}" data-type="income">✏️</button><button class="delete-btn" data-id="${tx.id}" data-type="income">🗑️</button></div>`;
                     }
                     if (tx.transactionType === 'expense') {
+                        const categoryLabel = tx.subcategory?.name
+                            ? `${tx.category.name} → ${tx.subcategory.name}`
+                            : tx.category.name;
                         listItem.innerHTML = `
                             <div style="font-size: 1.5em; margin-right: 15px; color: ${tx.category.color || '#7f8c8d'};"><i class="${getCategoryIcon(tx.category)}"></i></div>
                             <div style="width: 100%; display: flex; justify-content: space-between;">
-                                <span><strong>-${tx.amount.toFixed(2)} руб.</strong> - ${tx.description || tx.category.name}</span>
+                                <span><strong>-${tx.amount.toFixed(2)} руб.</strong> - ${tx.description || categoryLabel}</span>
                                 <small style="color: #555;">${date}</small>
                             </div>
                             ${actions}`;
@@ -358,6 +427,7 @@
                     expenseDateInput.value = scannedExpense.date;
                     expenseDescriptionInput.value = scannedExpense.description || '';
                     if (scannedExpense.category?.id) expenseCategorySelect.value = scannedExpense.category.id;
+                    populateSubcategories(scannedExpense.subcategory?.id);
                     expenseAmountInput.readOnly = true;
                     expenseAmountHint.classList.remove('hidden');
                     expenseErrorDiv.textContent = '';
@@ -379,6 +449,7 @@
             expenseDateInput.value = getTodayDateString();
             expenseAmountInput.readOnly = false;
             expenseAmountHint.classList.add('hidden');
+            populateSubcategories();
             expenseModal.style.display = 'block';
         });
 
@@ -430,6 +501,7 @@
                     body: JSON.stringify({
                         amount: expenseAmountInput.value,
                         categoryId: expenseCategorySelect.value,
+                        subcategoryId: expenseSubcategorySelect.value || null,
                         description: expenseDescriptionInput.value,
                         date: expenseDateInput.value
                     }),
@@ -557,6 +629,7 @@
                     expenseDateInput.value = data.date;
                     expenseDescriptionInput.value = data.description;
                     expenseCategorySelect.value = data.category.id;
+                    populateSubcategories(data.subcategory?.id);
                     const isReceiptExpense = !!data.receipt;
                     expenseAmountInput.readOnly = isReceiptExpense;
                     expenseAmountHint.classList.toggle('hidden', !isReceiptExpense);
@@ -588,6 +661,10 @@
             document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
             target.classList.add('selected');
             updatePreview();
+        });
+
+        expenseCategorySelect.addEventListener('change', () => {
+            populateSubcategories();
         });
 
         renderPalettes();
