@@ -167,6 +167,8 @@
         const expenseForm = getElement('expense-form');
         const expenseCategorySelect = getElement('expense-category');
         const expenseSubcategorySelect = getElement('expense-subcategory');
+        const newSubcategoryNameInput = getElement('new-subcategory-name');
+        const addSubcategoryBtn = getElement('add-subcategory-btn');
         const expenseErrorDiv = getElement('expense-error-message');
         const expenseDateInput = getElement('expense-date');
         const expenseIdInput = getElement('expense-id');
@@ -207,6 +209,9 @@
         let expenseChart = null;
         let currentPeriod = 'month';
         let currentCategorySummary = [];
+        let selectedChartMode = 'category';
+        let selectedChartCategoryId = null;
+        let selectedChartCategoryName = '';
         let categoryNameById = new Map();
         let categoryById = new Map();
 
@@ -243,6 +248,33 @@
             });
 
             expenseSubcategorySelect.value = selectedSubcategoryId ? String(selectedSubcategoryId) : '';
+        };
+
+        const createSubcategoryQuickly = async () => {
+            const name = (newSubcategoryNameInput.value || '').trim();
+            const categoryId = expenseCategorySelect.value;
+            if (!categoryId) {
+                expenseErrorDiv.textContent = 'Сначала выберите категорию.';
+                return;
+            }
+            if (!name) {
+                expenseErrorDiv.textContent = 'Введите название подкатегории.';
+                return;
+            }
+
+            const response = await apiFetch(`${API_URL}/categories/subcategories`, {
+                method: 'POST',
+                body: JSON.stringify({ name, categoryId: Number(categoryId) }),
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || 'Не удалось создать подкатегорию');
+            }
+
+            const createdSubcategory = await response.json();
+            newSubcategoryNameInput.value = '';
+            await fetchCategories();
+            populateSubcategories(createdSubcategory.id);
         };
 
         const fetchCategories = async () => {
@@ -288,6 +320,7 @@
 
         const renderExpenseChart = (summaryData, mode, titleText) => {
             if (expenseChart) expenseChart.destroy();
+            selectedChartMode = mode;
             const labels = summaryData.map(item => mode === 'category' ? item.categoryName : item.subcategoryName);
             const data = summaryData.map(item => item.totalAmount);
             const colors = summaryData.map(item => item.categoryColor || '#95a5a6');
@@ -304,15 +337,19 @@
                         if (mode === 'category' && elements.length > 0) {
                             const item = summaryData[elements[0].index];
                             if (!item?.categoryId) return;
+                            selectedChartCategoryId = Number(item.categoryId);
+                            selectedChartCategoryName = categoryNameById.get(Number(item.categoryId)) || item.categoryName || '';
                             const response = await apiFetch(`${API_URL}/expenses/summary-by-subcategory?categoryId=${item.categoryId}&period=${currentPeriod}`);
                             if (!response.ok) return;
                             const subcategorySummary = await response.json();
-                            const categoryName = categoryNameById.get(Number(item.categoryId)) || item.categoryName;
+                            const categoryName = selectedChartCategoryName;
                             renderExpenseChart(subcategorySummary, 'subcategory', `Подкатегории: ${categoryName}`);
                             return;
                         }
 
                         if (mode === 'subcategory' && elements.length === 0) {
+                            selectedChartCategoryId = null;
+                            selectedChartCategoryName = '';
                             renderExpenseChart(currentCategorySummary, 'category', 'Расходы по категориям');
                         }
                     }
@@ -351,7 +388,19 @@
                 const chartRes = await apiFetch(`${API_URL}/expenses/summary-by-category?period=${period}`);
                 if (!chartRes.ok) throw new Error('Не удалось загрузить данные для диаграммы');
                 currentCategorySummary = await chartRes.json();
-                renderExpenseChart(currentCategorySummary, 'category', 'Расходы по категориям');
+                if (selectedChartMode === 'subcategory' && selectedChartCategoryId) {
+                    const subcategoryRes = await apiFetch(`${API_URL}/expenses/summary-by-subcategory?categoryId=${selectedChartCategoryId}&period=${period}`);
+                    if (subcategoryRes.ok) {
+                        const subcategorySummary = await subcategoryRes.json();
+                        renderExpenseChart(subcategorySummary, 'subcategory', `Подкатегории: ${selectedChartCategoryName || 'выбранная категория'}`);
+                    } else {
+                        selectedChartCategoryId = null;
+                        selectedChartCategoryName = '';
+                        renderExpenseChart(currentCategorySummary, 'category', 'Расходы по категориям');
+                    }
+                } else {
+                    renderExpenseChart(currentCategorySummary, 'category', 'Расходы по категориям');
+                }
 
                 const [expenseRes, incomeRes] = await Promise.all([
                     apiFetch(`${API_URL}/expenses?period=${period}`),
@@ -374,7 +423,7 @@
                     let actions = '';
                     if (tx.transactionType === 'expense') {
                         const btns = [`<button class="edit-btn" data-id="${tx.id}" data-type="expense">✏️</button>`];
-                        if (!tx.receipt) btns.push(`<button class="delete-btn" data-id="${tx.id}" data-type="expense">🗑️</button>`);
+                        btns.push(`<button class="delete-btn" data-id="${tx.id}" data-type="expense">🗑️</button>`);
                         actions = `<div class="transaction-actions">${btns.join('')}</div>`;
                     } else {
                         actions = `<div class="transaction-actions"><button class="edit-btn" data-id="${tx.id}" data-type="income">✏️</button><button class="delete-btn" data-id="${tx.id}" data-type="income">🗑️</button></div>`;
@@ -446,6 +495,7 @@
             expenseIdInput.value = '';
             expenseErrorDiv.textContent = '';
             expenseForm.reset();
+            newSubcategoryNameInput.value = '';
             expenseDateInput.value = getTodayDateString();
             expenseAmountInput.readOnly = false;
             expenseAmountHint.classList.add('hidden');
@@ -562,6 +612,15 @@
                 }
             } catch (error) {
                 categoryErrorDiv.textContent = `Ошибка: ${error.message}`;
+            }
+        });
+
+        addSubcategoryBtn.addEventListener('click', async () => {
+            expenseErrorDiv.textContent = '';
+            try {
+                await createSubcategoryQuickly();
+            } catch (error) {
+                expenseErrorDiv.textContent = `Ошибка: ${error.message}`;
             }
         });
 

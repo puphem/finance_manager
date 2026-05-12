@@ -6,12 +6,14 @@ import com.example.financemanager.dto.ExpenseResponseDto;
 import com.example.financemanager.dto.SubcategoryExpenseDto;
 import com.example.financemanager.entity.Category;
 import com.example.financemanager.entity.Expense;
+import com.example.financemanager.entity.Receipt;
 import com.example.financemanager.entity.Subcategory;
 import com.example.financemanager.entity.User;
 import com.example.financemanager.exception.ResourceNotFoundException;
 import com.example.financemanager.mapper.ExpenseMapper;
 import com.example.financemanager.repository.CategoryRepository;
 import com.example.financemanager.repository.ExpenseRepository;
+import com.example.financemanager.repository.ReceiptRepository;
 import com.example.financemanager.repository.SubcategoryRepository;
 import com.example.financemanager.service.CategoryAssignmentService;
 import com.example.financemanager.service.CurrentUserResolver;
@@ -33,6 +35,7 @@ public class ExpenseServiceImpl implements ExpenseService {
     private final ExpenseRepository expenseRepository;
     private final CategoryRepository categoryRepository;
     private final SubcategoryRepository subcategoryRepository;
+    private final ReceiptRepository receiptRepository;
     private final CategoryAssignmentService categoryAssignmentService;
     private final ExpenseMapper expenseMapper;
     private final CurrentUserResolver currentUserResolver;
@@ -116,10 +119,16 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Transactional
     public void deleteExpense(Long id) {
         User user = currentUserResolver.getCurrentUser();
-        if (!expenseRepository.existsByIdAndUser(id, user)) {
-            throw new ResourceNotFoundException("Расход с ID " + id + " не найден.");
+        Expense expense = expenseRepository.findByIdAndUser(id, user)
+                .orElseThrow(() -> new ResourceNotFoundException("Расход с ID " + id + " не найден."));
+
+        Receipt receipt = expense.getReceipt();
+        if (receipt != null) {
+            receiptRepository.delete(receipt);
+            return;
         }
-        expenseRepository.deleteById(id);
+
+        expenseRepository.delete(expense);
     }
 
     @Override

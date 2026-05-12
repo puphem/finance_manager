@@ -36,10 +36,11 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long>, JpaSpec
             @Param("endDate") LocalDate endDate
     );
 
-    @Query("SELECT new com.example.financemanager.dto.SubcategoryExpenseDto(COALESCE(e.subcategory.name, 'Без подкатегории'), e.category.color, SUM(e.amount)) " +
+    @Query("SELECT new com.example.financemanager.dto.SubcategoryExpenseDto(COALESCE(s.name, 'Без подкатегории'), e.category.color, SUM(e.amount)) " +
             "FROM Expense e " +
+            "LEFT JOIN e.subcategory s " +
             "WHERE e.user = :user AND e.category.id = :categoryId AND e.date >= :startDate AND e.date <= :endDate " +
-            "GROUP BY e.subcategory.name, e.category.color " +
+            "GROUP BY s.name, e.category.color " +
             "ORDER BY SUM(e.amount) DESC")
     List<SubcategoryExpenseDto> findSubcategoryExpensesByUserAndCategoryAndDateBetween(
             @Param("user") User user,

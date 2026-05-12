@@ -49,7 +49,7 @@ public class FnsApiClient {
         }
 
         try {
-            Map<?, ?> responseMap = webClientBuilder
+            Object responseBody = webClientBuilder
                     .baseUrl(apiBaseUrl)
                     .build()
                     .post()
@@ -59,9 +59,16 @@ public class FnsApiClient {
                             "qrraw", qrCodeData
                     ))
                     .retrieve()
-                    .bodyToMono(Map.class)
+                    .bodyToMono(Object.class)
                     .block();
 
+            Map<?, ?> responseMap = asMap(responseBody);
+            if (responseMap == null && responseBody instanceof List<?> list && !list.isEmpty()) {
+                responseMap = asMap(list.get(0));
+            }
+            if (responseMap == null) {
+                return null;
+            }
             return mapToReceiptResponse(responseMap);
         } catch (WebClientResponseException ex) {
             return null;
@@ -133,6 +140,14 @@ public class FnsApiClient {
         if (topLevelReceipt != null && !topLevelReceipt.isEmpty()) {
             return topLevelReceipt;
         }
+
+        Map<?, ?> ticket = asMap(responseMap.get("ticket"));
+        Map<?, ?> document = ticket == null ? null : asMap(ticket.get("document"));
+        Map<?, ?> nestedReceipt = document == null ? null : asMap(document.get("receipt"));
+        if (nestedReceipt != null && !nestedReceipt.isEmpty()) {
+            return nestedReceipt;
+        }
+
         return null;
     }
 

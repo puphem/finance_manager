@@ -108,7 +108,14 @@
             <div id="expense-amount-hint" class="field-hint hidden">Для расходов из чека сумма фиксирована и не редактируется.</div>
             <div class="form-group"><label for="expense-date">Дата:</label><input type="date" id="expense-date" required></div>
             <div class="form-group"><label for="expense-category">Категория:</label><select id="expense-category" required></select><a href="#" id="add-category-link" style="font-size: 12px; display: block; margin-top: 5px;">Добавить новую категорию</a></div>
-            <div class="form-group"><label for="expense-subcategory">Подкатегория:</label><select id="expense-subcategory"></select></div>
+            <div class="form-group">
+                <label for="expense-subcategory">Подкатегория:</label>
+                <select id="expense-subcategory"></select>
+                <div style="display:flex; gap:8px; margin-top:6px;">
+                    <input type="text" id="new-subcategory-name" placeholder="Новая подкатегория" style="flex:1;">
+                    <button type="button" id="add-subcategory-btn">+ Подкатегория</button>
+                </div>
+            </div>
             <div class="form-group"><label for="expense-description">Уточнение (необязательно):</label><input type="text" id="expense-description"></div>
             <button type="submit">Сохранить</button>
         </form>

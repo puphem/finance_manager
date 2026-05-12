@@ -119,8 +119,8 @@ public class CategoryAssignmentService {
     private Map<String, List<String>> buildCategoryKeywords() {
         Map<String, List<String>> keywords = new LinkedHashMap<>();
         keywords.put("продукт", List.of("молок", "сыр", "хлеб", "яйц", "кефир", "масло", "колбас", "мясо", "овощ", "фрукт", "чай", "кофе", "сахар", "круп", "макарон", "магазин"));
-        keywords.put("транспорт", List.of("бенз", "дизел", "метро", "такси", "автобус", "троллейбус", "электричк", "парковк", "каршеринг", "топлив", "uber", "yandex go", "яндекс go"));
-        keywords.put("такси", List.of("такси", "uber", "taxi", "yandex go", "яндекс go", "поездка"));
+        keywords.put("транспорт", List.of("бенз", "дизел", "метро", "такси", "автобус", "троллейбус", "электричк", "парковк", "каршеринг", "топлив", "uber", "yandex go", "яндекс go", "перевозк", "пассажир", "багаж"));
+        keywords.put("такси", List.of("такси", "uber", "taxi", "yandex go", "яндекс go", "поездка", "перевозк", "пассажир", "багаж"));
         keywords.put("кафе", List.of("кафе", "ресторан", "кофейн", "пицц", "бургер", "суши", "доставка"));
         keywords.put("ресторан", List.of("кафе", "ресторан", "кофейн", "пицц", "бургер", "суши", "доставка"));
         keywords.put("развлеч", List.of("кино", "театр", "игр", "билет", "квест", "музей", "концерт", "подписк"));
@@ -149,7 +149,7 @@ public class CategoryAssignmentService {
         keywords.put("каршеринг", List.of("каршеринг", "delimobil", "belka", "youdrive"));
         keywords.put("обслуживание авто", List.of("шиномонтаж", "мойка", "то", "масло", "ремонт авто"));
 
-        keywords.put("поездки по городу", List.of("такси", "uber", "yandex go", "яндекс go"));
+        keywords.put("поездки по городу", List.of("такси", "uber", "yandex go", "яндекс go", "перевозк", "пассажир", "багаж"));
         keywords.put("межгород", List.of("межгород", "поездка между", "дальняя поездка"));
         keywords.put("доставка", List.of("доставка", "courier", "курьер"));
         keywords.put("комфорт/бизнес", List.of("comfort", "business", "комфорт", "бизнес"));
