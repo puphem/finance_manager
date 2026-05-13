@@ -59,12 +59,13 @@ public class ReceiptServiceImpl implements ReceiptService {
         receipt.setUser(user);
 
         Expense expense = new Expense();
-        String expenseDescription = buildExpenseDescription(receiptJson.getUser(), receiptJson.getItems());
+        List<String> itemNames = extractItemNames(receiptJson.getItems());
+        String expenseDescription = buildExpenseDescription(receiptJson.getUser(), itemNames);
         expense.setDescription(expenseDescription);
         expense.setAmount(receipt.getTotalAmount());
         expense.setDate(receiptDate);
         expense.setUser(user);
-        categoryAssignmentService.assignCategory(expense, user);
+        categoryAssignmentService.assignCategoryByReceiptItems(expense, itemNames, user);
         receipt.addExpense(expense);
 
         Receipt savedReceipt = receiptRepository.save(receipt);
@@ -72,19 +73,9 @@ public class ReceiptServiceImpl implements ReceiptService {
         return receiptMapper.toResponseDto(savedReceipt);
     }
 
-    private String buildExpenseDescription(String storeName, List<FnsReceiptResponse.Item> items) {
+    private String buildExpenseDescription(String storeName, List<String> itemNames) {
         String normalizedStore = storeName == null || storeName.isBlank() ? "магазин" : storeName.trim();
-        if (items == null || items.isEmpty()) {
-            return "Покупка в " + normalizedStore;
-        }
-
-        List<String> itemNames = items.stream()
-                .filter(item -> item != null && item.getName() != null && !item.getName().isBlank())
-                .map(item -> item.getName().trim())
-                .limit(3)
-                .collect(Collectors.toList());
-
-        if (itemNames.isEmpty()) {
+        if (itemNames == null || itemNames.isEmpty()) {
             return "Покупка в " + normalizedStore;
         }
 
@@ -94,6 +85,17 @@ public class ReceiptServiceImpl implements ReceiptService {
 
         String joinedItems = String.join(", ", itemNames);
         return "Чек " + normalizedStore + ": " + joinedItems;
+    }
+
+    private List<String> extractItemNames(List<FnsReceiptResponse.Item> items) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        return items.stream()
+                .filter(item -> item != null && item.getName() != null && !item.getName().isBlank())
+                .map(item -> item.getName().trim())
+                .limit(12)
+                .collect(Collectors.toList());
     }
 
     private BigDecimal centsToRubles(long valueInCents) {

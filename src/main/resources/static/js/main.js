@@ -38,6 +38,17 @@
         if (usernameEl) usernameEl.textContent = getStoredUsername() || '';
     };
 
+    const registerPwaSupport = async () => {
+        if (!('serviceWorker' in navigator)) {
+            return;
+        }
+        try {
+            await navigator.serviceWorker.register('/service-worker.js');
+        } catch (error) {
+            console.warn('Service Worker не зарегистрирован:', error);
+        }
+    };
+
     // Wrapper for fetch with JWT header and 401 handling
     const apiFetch = async (url, options = {}) => {
         const token = getToken();
@@ -501,6 +512,7 @@
             expenseAmountHint.classList.add('hidden');
             populateSubcategories();
             expenseModal.style.display = 'block';
+            expenseAmountInput.focus();
         });
 
         addIncomeBtn.addEventListener('click', () => {
@@ -693,6 +705,7 @@
                     expenseAmountInput.readOnly = isReceiptExpense;
                     expenseAmountHint.classList.toggle('hidden', !isReceiptExpense);
                     expenseModal.style.display = 'block';
+                    expenseDescriptionInput.focus();
                 } else if (type === 'income') {
                     incomeModalTitle.textContent = 'Редактировать доход';
                     incomeIdInput.value = data.id;
@@ -736,6 +749,7 @@
     // =================== INIT ===================
 
     setupAuthPage();
+    registerPwaSupport().catch(() => {});
 
     if (getToken()) {
         showApp();

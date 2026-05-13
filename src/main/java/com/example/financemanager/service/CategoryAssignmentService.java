@@ -13,12 +13,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class CategoryAssignmentService {
     private final CategoryRepository categoryRepository;
     private final SubcategoryRepository subcategoryRepository;
+    private static final Pattern NON_ALNUM = Pattern.compile("[^\\p{L}\\p{N}\\s]+");
+    private static final Pattern MULTIPLE_SPACES = Pattern.compile("\\s+");
 
     public void assignCategory(Expense expense, User user) {
         Category category = suggestCategory(expense.getDescription(), user);
@@ -26,8 +29,17 @@ public class CategoryAssignmentService {
         expense.setSubcategory(suggestSubcategory(expense.getDescription(), category, user));
     }
 
+    public void assignCategoryByReceiptItems(Expense expense, List<String> itemNames, User user) {
+        String baseDescription = expense.getDescription();
+        String itemText = itemNames == null ? "" : String.join(" ", itemNames);
+        String signalText = (baseDescription == null ? "" : baseDescription + " ") + itemText;
+        Category category = suggestCategory(signalText, user);
+        expense.setCategory(category);
+        expense.setSubcategory(suggestSubcategory(signalText, category, user));
+    }
+
     public Category suggestCategory(String expenseDescription, User user) {
-        String itemName = expenseDescription == null ? "" : expenseDescription.toLowerCase(Locale.ROOT);
+        String itemName = normalize(expenseDescription);
         List<Category> categories = categoryRepository.findAllByUser(user);
         Category defaultCategory = categories.stream()
                 .filter(category -> "продукты".equalsIgnoreCase(category.getName()))
@@ -48,16 +60,12 @@ public class CategoryAssignmentService {
 
             for (Map.Entry<String, List<String>> entry : categoryKeywords.entrySet()) {
                 if (categoryName.contains(entry.getKey())) {
-                    for (String keyword : entry.getValue()) {
-                        if (itemName.contains(keyword)) {
-                            score++;
-                        }
-                    }
+                    score += countKeywordMatches(itemName, entry.getValue());
                 }
             }
 
-            if (score == 0 && !categoryName.isBlank() && itemName.contains(categoryName)) {
-                score = 1;
+            if (!categoryName.isBlank() && itemName.contains(categoryName)) {
+                score = Math.max(score, 1);
             }
 
             if (score > bestScore) {
@@ -79,7 +87,7 @@ public class CategoryAssignmentService {
             return null;
         }
 
-        String description = expenseDescription == null ? "" : expenseDescription.toLowerCase(Locale.ROOT);
+        String description = normalize(expenseDescription);
         Map<String, List<String>> keywordBySubcategory = buildSubcategoryKeywords();
 
         Subcategory matchedSubcategory = null;
@@ -88,16 +96,10 @@ public class CategoryAssignmentService {
         for (Subcategory subcategory : subcategories) {
             String subcategoryName = subcategory.getName() == null ? "" : subcategory.getName().toLowerCase(Locale.ROOT);
             List<String> keywords = keywordBySubcategory.getOrDefault(subcategoryName, List.of());
-            int score = 0;
+            int score = countKeywordMatches(description, keywords);
 
-            for (String keyword : keywords) {
-                if (description.contains(keyword)) {
-                    score++;
-                }
-            }
-
-            if (score == 0 && !subcategoryName.isBlank() && description.contains(subcategoryName)) {
-                score = 1;
+            if (!subcategoryName.isBlank() && description.contains(subcategoryName)) {
+                score = Math.max(score, 1);
             }
 
             if (score > bestScore) {
@@ -114,6 +116,29 @@ public class CategoryAssignmentService {
                 .filter(subcategory -> "прочее".equalsIgnoreCase(subcategory.getName()))
                 .findFirst()
                 .orElse(subcategories.get(0));
+    }
+
+    private int countKeywordMatches(String sourceText, List<String> keywords) {
+        if (sourceText.isBlank() || keywords == null || keywords.isEmpty()) {
+            return 0;
+        }
+        int score = 0;
+        for (String keyword : keywords) {
+            String normalizedKeyword = normalize(keyword);
+            if (!normalizedKeyword.isBlank() && sourceText.contains(normalizedKeyword)) {
+                score++;
+            }
+        }
+        return score;
+    }
+
+    private String normalize(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        String lowered = text.toLowerCase(Locale.ROOT).replace('ё', 'е');
+        String noPunctuation = NON_ALNUM.matcher(lowered).replaceAll(" ");
+        return MULTIPLE_SPACES.matcher(noPunctuation).replaceAll(" ").trim();
     }
 
     private Map<String, List<String>> buildCategoryKeywords() {

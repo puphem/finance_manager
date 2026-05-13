@@ -19,13 +19,18 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class CategoryServiceImpl implements CategoryService {
 
+    private static final Map<String, List<String>> DEFAULT_SUBCATEGORIES = createDefaultSubcategories();
     private final CategoryRepository categoryRepository;
     private final SubcategoryRepository subcategoryRepository;
     private final CategoryMapper categoryMapper;
@@ -43,6 +48,7 @@ public class CategoryServiceImpl implements CategoryService {
         Category category = categoryMapper.toEntity(categoryDto);
         category.setUser(user);
         Category savedCategory = categoryRepository.save(category);
+        ensureDefaultSubcategories(savedCategory, user);
         return categoryMapper.toResponseDto(savedCategory);
     }
 
@@ -66,10 +72,12 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<CategoryResponseDto> getAllCategories() {
         User user = currentUserResolver.getCurrentUser();
-        return categoryRepository.findAllByUser(user).stream()
+        List<Category> categories = categoryRepository.findAllByUser(user);
+        categories.forEach(category -> ensureDefaultSubcategories(category, user));
+        return categories.stream()
                 .map(categoryMapper::toResponseDto)
                 .collect(Collectors.toList());
     }
@@ -98,5 +106,58 @@ public class CategoryServiceImpl implements CategoryService {
             throw new ResourceNotFoundException("Категория с ID " + id + " не найдена.");
         }
         categoryRepository.deleteById(id);
+    }
+
+    private void ensureDefaultSubcategories(Category category, User user) {
+        List<String> defaults = resolveDefaultSubcategoryNames(category.getName());
+        if (defaults.isEmpty()) {
+            return;
+        }
+
+        Set<String> existingNames = subcategoryRepository.findByCategoryIdAndCategoryUser(category.getId(), user).stream()
+                .map(Subcategory::getName)
+                .filter(name -> name != null && !name.isBlank())
+                .map(name -> name.toLowerCase(Locale.ROOT).trim())
+                .collect(Collectors.toSet());
+
+        for (String defaultName : defaults) {
+            String normalized = defaultName.toLowerCase(Locale.ROOT).trim();
+            if (existingNames.contains(normalized)) {
+                continue;
+            }
+            Subcategory subcategory = new Subcategory();
+            subcategory.setName(defaultName);
+            subcategory.setCategory(category);
+            subcategoryRepository.save(subcategory);
+            existingNames.add(normalized);
+        }
+    }
+
+    private List<String> resolveDefaultSubcategoryNames(String categoryName) {
+        String normalizedCategoryName = categoryName == null ? "" : categoryName.toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, List<String>> template : DEFAULT_SUBCATEGORIES.entrySet()) {
+            if (normalizedCategoryName.contains(template.getKey())) {
+                return template.getValue();
+            }
+        }
+        return List.of("Прочее");
+    }
+
+    private static Map<String, List<String>> createDefaultSubcategories() {
+        Map<String, List<String>> templates = new LinkedHashMap<>();
+        templates.put("продукт", List.of("Овощи и фрукты", "Молочные продукты", "Мясо и рыба", "Напитки", "Сладости", "Прочее"));
+        templates.put("транспорт", List.of("Общественный транспорт", "Такси", "Топливо", "Парковка", "Прочее"));
+        templates.put("такси", List.of("Поездки по городу", "Межгород", "Доставка", "Комфорт/Бизнес", "Прочее"));
+        templates.put("кафе", List.of("Кафе", "Рестораны", "Фастфуд", "Доставка еды", "Прочее"));
+        templates.put("ресторан", List.of("Кафе", "Рестораны", "Фастфуд", "Доставка еды", "Прочее"));
+        templates.put("развлеч", List.of("Кино и сериалы", "Игры", "Концерты", "Хобби", "Подписки", "Прочее"));
+        templates.put("счет", List.of("ЖКХ", "Интернет и связь", "Налоги и штрафы", "Аренда/Ипотека", "Прочее"));
+        templates.put("дом", List.of("Ремонт", "Мебель", "Бытовая химия", "Техника", "Хозтовары", "Прочее"));
+        templates.put("здоров", List.of("Аптека", "Врачи и анализы", "Стоматология", "Спорт и здоровье", "Прочее"));
+        templates.put("одеж", List.of("Повседневная одежда", "Обувь", "Аксессуары", "Спорттовары", "Прочее"));
+        templates.put("образов", List.of("Курсы", "Книги", "Репетиторы", "Онлайн-платформы", "Прочее"));
+        templates.put("питом", List.of("Корм", "Ветклиника", "Аксессуары для питомцев", "Груминг", "Прочее"));
+        templates.put("красот", List.of("Косметика", "Салон", "Уход за собой", "Парфюмерия", "Прочее"));
+        return templates;
     }
 }
