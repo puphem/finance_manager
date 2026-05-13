@@ -71,7 +71,7 @@ async function networkFirst(request) {
         const runtimeCache = await caches.open(RUNTIME_CACHE);
         runtimeCache.put(request, networkResponse.clone());
         return networkResponse;
-    } catch (_) {
+    } catch (error) {
         const cached = await caches.match(request);
         if (cached) {
             return cached;
