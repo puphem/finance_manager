@@ -193,6 +193,13 @@
         });
     };
 
+    const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+
     let appInitialized = false;
     let initInProgress = false;
 
@@ -475,19 +482,21 @@
             const renderExpenseRow = (expense, index) => {
                 const item = document.createElement('li');
                 const date = new Date(expense.date).toLocaleDateString('ru-RU');
-                const category = expense.category || {};
-                const icon = getCategoryIcon(category);
-                const amountText = `-${Number(expense.amount || 0).toFixed(2)} руб.`;
+            const category = expense.category || {};
+            const icon = getCategoryIcon(category);
+            const amountText = `-${Number(expense.amount || 0).toFixed(2)} руб.`;
+            const safeDescription = escapeHtml(expense.description || category.name || 'Расход');
+            const safeSubcategory = escapeHtml(expense.subcategory?.name || '');
 
-                const subcategoryBadge = expense.subcategory?.name
-                    ? `<span class="transaction-subcategory" style="background:${getSubcategoryTint(category.color, index)}">${expense.subcategory.name}</span>`
-                    : '';
+            const subcategoryBadge = expense.subcategory?.name
+                ? `<span class="transaction-subcategory" style="background:${getSubcategoryTint(category.color, index)}">${safeSubcategory}</span>`
+                : '';
 
-                item.innerHTML = `
+            item.innerHTML = `
                     <div style="font-size:1.35em; color:${category.color || '#7f8c8d'};"><i class="${icon}"></i></div>
                     <div class="transaction-main">
                         <div class="transaction-title">
-                            <span><strong>${amountText}</strong> — ${expense.description || (category.name || 'Расход')}</span>
+                            <span><strong>${amountText}</strong> — ${safeDescription}</span>
                             ${subcategoryBadge}
                         </div>
                         <small class="transaction-date">${date}</small>
