@@ -881,10 +881,16 @@
                 const file = event.target.files[0];
                 if (!file) return;
                 receiptErrorDiv.textContent = 'Обработка...';
-                receiptPreview.src = URL.createObjectURL(file);
-                receiptPreviewContainer.style.display = 'block';
                 const reader = new FileReader();
                 reader.onload = (e) => {
+                    const result = typeof e.target?.result === 'string' ? e.target.result : '';
+                    if (!result.startsWith('data:image/')) {
+                        receiptErrorDiv.textContent = 'Ошибка: загруженный файл не является изображением.';
+                        receiptPreviewContainer.style.display = 'none';
+                        return;
+                    }
+                    receiptPreview.src = result;
+                    receiptPreviewContainer.style.display = 'block';
                     const img = new Image();
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
@@ -902,7 +908,7 @@
                         }
                     };
                     img.onerror = () => { receiptErrorDiv.textContent = 'Ошибка: Не удалось прочитать файл как изображение.'; };
-                    img.src = e.target.result;
+                    img.src = result;
                 };
                 reader.onerror = () => { receiptErrorDiv.textContent = 'Ошибка: Не удалось прочитать файл.'; };
                 reader.readAsDataURL(file);
