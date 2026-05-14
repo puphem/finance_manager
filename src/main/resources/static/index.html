@@ -63,11 +63,17 @@
 
         <div class="app-header">
             <strong>💰 Мои Финансы</strong>
-            <div>
+            <div class="header-actions">
                 <span id="current-username"></span>
                 <button id="logout-btn">Выйти</button>
             </div>
         </div>
+
+        <nav class="app-nav">
+            <button id="nav-dashboard" class="app-nav-btn active" data-view="dashboard-view">Дашборд</button>
+            <button id="nav-expenses" class="app-nav-btn" data-view="expenses-page-view">Все траты</button>
+            <button id="nav-settings" class="app-nav-btn" data-view="settings-view">Настройки</button>
+        </nav>
 
         <section id="absolute-balance-section">
             <h2>Текущий остаток средств</h2>
@@ -86,21 +92,99 @@
             <button id="scan-receipt-btn" class="quick-action-scan">Сканировать чек</button>
         </div>
 
-        <section id="chart-section">
-            <canvas id="expense-chart"></canvas>
+        <div id="dashboard-error-message" class="error-message"></div>
+
+        <section id="dashboard-view" class="app-view">
+            <div class="dashboard-grid">
+                <div class="dashboard-chart-panel">
+                    <div class="chart-header">
+                        <h2>Диаграмма трат</h2>
+                        <div id="chart-filter-buttons">
+                            <button data-period="day">День</button>
+                            <button data-period="week">Неделя</button>
+                            <button data-period="month" class="active">Месяц</button>
+                            <button data-period="all">Все</button>
+                        </div>
+                    </div>
+                    <section id="chart-section">
+                        <canvas id="expense-chart"></canvas>
+                    </section>
+                </div>
+                <aside class="dashboard-recent-panel">
+                    <div class="transactions-header">
+                        <h2>Последние траты</h2>
+                        <button id="open-all-expenses-btn" type="button">Открыть все</button>
+                    </div>
+                    <ul id="recent-expense-list"></ul>
+                </aside>
+            </div>
         </section>
 
-        <section>
-            <div class="transactions-header">
-                <h2>Транзакции за период</h2>
-                  <div id="filter-buttons">
-                      <button data-period="day">День</button>
-                     <button data-period="week">Неделя</button>
-                     <button data-period="month" class="active">Месяц</button>
-                     <button data-period="all">Все время</button>
-                 </div>
-             </div>
-            <ul id="transaction-list"></ul>
+        <section id="expenses-page-view" class="app-view hidden">
+            <div class="expenses-page-header">
+                <h2>Все траты</h2>
+                <div class="expenses-page-actions">
+                    <button id="back-to-dashboard-btn" type="button">← Назад</button>
+                </div>
+            </div>
+
+            <div class="expenses-filters">
+                <div class="filter-group">
+                    <label>Период</label>
+                    <div id="expenses-filter-presets" class="preset-buttons">
+                        <button type="button" data-preset="today">Сегодня</button>
+                        <button type="button" data-preset="yesterday">Вчера</button>
+                        <button type="button" data-preset="week">7 дней</button>
+                        <button type="button" data-preset="month" class="active">30 дней</button>
+                        <button type="button" data-preset="custom">Свой</button>
+                        <button type="button" data-preset="all">Все</button>
+                    </div>
+                </div>
+                <div class="filter-grid">
+                    <div class="form-group">
+                        <label for="expenses-filter-start">Начало периода</label>
+                        <input type="date" id="expenses-filter-start">
+                    </div>
+                    <div class="form-group">
+                        <label for="expenses-filter-end">Конец периода</label>
+                        <input type="date" id="expenses-filter-end">
+                    </div>
+                    <div class="form-group">
+                        <label for="expenses-filter-category">Категория</label>
+                        <select id="expenses-filter-category"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="expenses-filter-search">Поиск</label>
+                        <input type="text" id="expenses-filter-search" placeholder="Описание, категория или подкатегория">
+                    </div>
+                </div>
+                <div class="filter-actions">
+                    <button type="button" id="apply-expenses-filters-btn">Применить фильтры</button>
+                    <button type="button" id="reset-expenses-filters-btn">Сбросить</button>
+                </div>
+            </div>
+
+            <div id="expenses-page-summary" class="field-hint"></div>
+            <ul id="expenses-page-list"></ul>
+            <button id="expenses-page-load-more-btn" type="button" class="hidden">Показать еще</button>
+        </section>
+
+        <section id="settings-view" class="app-view hidden">
+            <h2>Настройки</h2>
+            <div class="settings-grid">
+                <div class="form-group">
+                    <label for="font-size-select">Размер шрифта</label>
+                    <select id="font-size-select">
+                        <option value="small">Маленький</option>
+                        <option value="normal">Обычный</option>
+                        <option value="large">Крупный</option>
+                    </select>
+                </div>
+                <div class="form-group settings-toggle">
+                    <label for="dark-theme-toggle">Темная тема</label>
+                    <input type="checkbox" id="dark-theme-toggle">
+                </div>
+            </div>
         </section>
     </div>
 </div>
