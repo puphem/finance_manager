@@ -72,6 +72,7 @@
         <nav class="app-nav">
             <button id="nav-dashboard" class="app-nav-btn active" data-view="dashboard-view">Дашборд</button>
             <button id="nav-expenses" class="app-nav-btn" data-view="expenses-page-view">Все траты</button>
+            <button id="nav-calendar" class="app-nav-btn" data-view="calendar-view">Календарь</button>
             <button id="nav-settings" class="app-nav-btn" data-view="settings-view">Настройки</button>
         </nav>
 
@@ -186,8 +187,31 @@
                 </div>
             </div>
         </section>
+
+        <section id="calendar-view" class="app-view hidden">
+            <h2>Календарь расходов</h2>
+            <div class="calendar-nav">
+                <button id="calendar-prev-btn" type="button"><i class="fas fa-chevron-left"></i></button>
+                <span id="calendar-month-label"></span>
+                <button id="calendar-next-btn" type="button"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <div class="calendar-grid-header">
+                <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+            </div>
+            <div id="calendar-grid" class="calendar-grid"></div>
+            <div id="calendar-legend"></div>
+        </section>
     </div>
 </div>
+
+<!-- Bottom Navigation (mobile only) -->
+<nav id="bottom-nav">
+    <button class="bottom-nav-btn active" data-view="dashboard-view"><i class="fas fa-home"></i><span>Дашборд</span></button>
+    <button class="bottom-nav-btn" data-view="expenses-page-view"><i class="fas fa-list"></i><span>Траты</span></button>
+    <button id="bottom-nav-plus" title="Быстро добавить"><i class="fas fa-plus"></i></button>
+    <button class="bottom-nav-btn" data-view="calendar-view"><i class="fas fa-calendar-alt"></i><span>Календарь</span></button>
+    <button class="bottom-nav-btn" data-view="settings-view"><i class="fas fa-cog"></i><span>Настройки</span></button>
+</nav>
 
 <!-- Модальное окно для РАСХОДА -->
 <div id="expense-modal" class="modal">
@@ -261,6 +285,31 @@
             <button type="submit">Сохранить</button>
         </form>
         <div id="income-error-message" class="error-message"></div>
+    </div>
+</div>
+
+<!-- Модальное окно БЫСТРОЕ ДОБАВЛЕНИЕ -->
+<div id="quick-add-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>Быстро добавить</h2>
+        <div id="quick-add-type-row">
+            <button type="button" id="qa-type-expense" class="quick-action-expense active" style="background-color:#C0392B;">— Расход</button>
+            <button type="button" id="qa-type-income" class="quick-action-income" style="background-color:#27ae60;">+ Доход</button>
+        </div>
+        <form id="quick-add-form">
+            <div class="form-group">
+                <label for="qa-description">Описание (необязательно):</label>
+                <input type="text" id="qa-description" placeholder="кофе, кино, зарплата…" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="qa-amount">Сумма:</label>
+                <input type="number" id="qa-amount" step="0.01" min="0.01" required placeholder="0.00">
+            </div>
+            <div id="qa-detected-hint" class="field-hint"></div>
+            <button type="submit">Добавить</button>
+        </form>
+        <div id="quick-add-error" class="error-message"></div>
     </div>
 </div>
 

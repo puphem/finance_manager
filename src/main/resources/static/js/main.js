@@ -208,8 +208,9 @@
         initInProgress = true;
 
         try {
-            const navButtons = Array.from(document.querySelectorAll('.app-nav-btn'));
-            const appViews = Array.from(document.querySelectorAll('.app-view'));
+        const navButtons = Array.from(document.querySelectorAll('.app-nav-btn'));
+        const bottomNavBtns = Array.from(document.querySelectorAll('.bottom-nav-btn'));
+        const appViews = Array.from(document.querySelectorAll('.app-view'));
 
             const absoluteBalanceEl = getElement('absolute-balance');
             const periodIncomeEl = getElement('period-income');
@@ -305,9 +306,17 @@
                 navButtons.forEach(btn => {
                     btn.classList.toggle('active', btn.dataset.view === viewId);
                 });
+                bottomNavBtns.forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.view === viewId);
+                });
+                if (viewId === 'calendar-view') renderCalendarView();
             };
 
             navButtons.forEach(btn => {
+                btn.addEventListener('click', () => setActiveView(btn.dataset.view));
+            });
+
+            bottomNavBtns.forEach(btn => {
                 btn.addEventListener('click', () => setActiveView(btn.dataset.view));
             });
 
@@ -328,6 +337,10 @@
             let expensesVisibleCount = EXPENSES_PAGE_STEP;
             let expenseChart = null;
             let expensesPagePreset = 'month';
+            let calendarYear = new Date().getFullYear();
+            let calendarMonth = new Date().getMonth();
+            let calendarExpensesCache = null;
+            let qaType = 'expense';
 
             const renderPalettes = () => {
                 iconPicker.innerHTML = ICONS.map(icon => `<div class="icon-option" data-icon="${icon}"><i class="${icon}"></i></div>`).join('');
@@ -481,6 +494,7 @@
 
             const renderExpenseRow = (expense, index) => {
                 const item = document.createElement('li');
+                item.classList.add('swipeable');
                 const date = new Date(expense.date).toLocaleDateString('ru-RU');
             const category = expense.category || {};
             const icon = getCategoryIcon(category);
@@ -493,6 +507,8 @@
                 : '';
 
             item.innerHTML = `
+                    <div class="swipe-action-bg swipe-action-right">✏️</div>
+                    <div class="swipe-action-bg swipe-action-left">🗑️</div>
                     <div style="font-size:1.35em; color:${category.color || '#7f8c8d'};"><i class="${icon}"></i></div>
                     <div class="transaction-main">
                         <div class="transaction-title">
@@ -502,11 +518,339 @@
                         <small class="transaction-date">${date}</small>
                     </div>
                     <div class="transaction-actions">
+                        <button class="repeat-btn" data-id="${expense.id}" data-type="expense" title="Повторить">🔄</button>
                         <button class="edit-btn" data-id="${expense.id}" data-type="expense">✏️</button>
                         <button class="delete-btn" data-id="${expense.id}" data-type="expense">🗑️</button>
                     </div>`;
+                attachSwipeHandlers(item, expense.id);
                 return item;
             };
+
+            /* ======= SWIPE ACTIONS ======= */
+            const attachSwipeHandlers = (item, expenseId) => {
+                let startX = 0;
+                let currentX = 0;
+                let swiping = false;
+                const THRESHOLD = 65;
+
+                const reset = () => {
+                    item.style.transform = '';
+                    item.querySelectorAll('.swipe-action-bg').forEach(el => { el.style.opacity = '0'; });
+                    swiping = false;
+                };
+
+                item.addEventListener('touchstart', (e) => {
+                    startX = e.touches[0].clientX;
+                    currentX = startX;
+                    swiping = true;
+                }, { passive: true });
+
+                item.addEventListener('touchmove', (e) => {
+                    if (!swiping) return;
+                    currentX = e.touches[0].clientX;
+                    const dx = currentX - startX;
+                    const clamped = Math.max(-110, Math.min(110, dx));
+                    item.style.transform = `translateX(${clamped}px)`;
+                    const leftBg = item.querySelector('.swipe-action-right');
+                    const rightBg = item.querySelector('.swipe-action-left');
+                    if (dx > 0 && leftBg) leftBg.style.opacity = Math.min(1, dx / THRESHOLD).toFixed(2);
+                    if (dx < 0 && rightBg) rightBg.style.opacity = Math.min(1, -dx / THRESHOLD).toFixed(2);
+                }, { passive: true });
+
+                item.addEventListener('touchend', async () => {
+                    if (!swiping) return;
+                    const dx = currentX - startX;
+                    reset();
+                    if (dx > THRESHOLD) {
+                        // swipe right → edit
+                        const response = await apiFetch(`${API_URL}/expenses/${expenseId}`);
+                        if (!response.ok) return;
+                        const data = await response.json();
+                        openExpenseEditForm(data);
+                    } else if (dx < -THRESHOLD) {
+                        // swipe left → delete
+                        if (confirm('Удалить трату?')) {
+                            await apiFetch(`${API_URL}/expenses/${expenseId}`, { method: 'DELETE' });
+                            await updateDashboard();
+                        }
+                    }
+                });
+            };
+
+            const openExpenseEditForm = (data) => {
+                expenseModalTitle.textContent = 'Редактировать расход';
+                expenseIdInput.value = data.id;
+                expenseAmountInput.value = data.amount;
+                expenseDateInput.value = data.date;
+                expenseDescriptionInput.value = data.description;
+                expenseCategorySelect.value = data.category.id;
+                populateSubcategories(data.subcategory?.id);
+                const isReceiptExpense = !!data.receipt;
+                expenseAmountInput.readOnly = isReceiptExpense;
+                expenseAmountHint.classList.toggle('hidden', !isReceiptExpense);
+                expenseErrorDiv.textContent = '';
+                expenseModal.style.display = 'block';
+                expenseDescriptionInput.focus();
+            };
+
+            /* ======= CALENDAR VIEW ======= */
+            const MONTH_NAMES_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+            const hexToRgba = (hex, alpha) => {
+                const rgb = parseHexColor(hex);
+                if (!rgb) return `rgba(149,165,166,${alpha})`;
+                return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`;
+            };
+
+            const renderCalendarView = async () => {
+                const monthLabel = document.getElementById('calendar-month-label');
+                const grid = document.getElementById('calendar-grid');
+                const legend = document.getElementById('calendar-legend');
+                if (!grid) return;
+                monthLabel.textContent = `${MONTH_NAMES_RU[calendarMonth]} ${calendarYear}`;
+
+                // Determine first/last day of month
+                const firstDay = new Date(calendarYear, calendarMonth, 1);
+                const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+                const startStr = toDateInputValue(firstDay);
+                const endStr = toDateInputValue(lastDay);
+
+                // Fetch expenses for month
+                try {
+                    const response = await apiFetch(`${API_URL}/expenses?period=all`);
+                    if (!response.ok) return;
+                    const all = await response.json();
+                    calendarExpensesCache = all.filter(exp => {
+                        const d = exp.date ? exp.date.slice(0, 10) : '';
+                        return d >= startStr && d <= endStr;
+                    });
+                } catch (e) {
+                    console.error('Calendar fetch error', e);
+                    return;
+                }
+
+                // Aggregate by day
+                const dayMap = {}; // day -> { total, categoryTotals: { id: { total, color, name } } }
+                calendarExpensesCache.forEach(exp => {
+                    const day = parseInt((exp.date || '').slice(8, 10), 10);
+                    if (!day) return;
+                    if (!dayMap[day]) dayMap[day] = { total: 0, categoryTotals: {} };
+                    const amount = Number(exp.amount || 0);
+                    dayMap[day].total += amount;
+                    const catId = exp.category?.id;
+                    if (catId) {
+                        if (!dayMap[day].categoryTotals[catId]) {
+                            dayMap[day].categoryTotals[catId] = { total: 0, color: exp.category.color || '#95a5a6', name: exp.category.name || '' };
+                        }
+                        dayMap[day].categoryTotals[catId].total += amount;
+                    }
+                });
+
+                // Max day total for heatmap
+                const totals = Object.values(dayMap).map(d => d.total);
+                const maxTotal = totals.length > 0 ? Math.max(...totals) : 1;
+
+                // Day-of-week offset for first day (Monday = 0)
+                let startDow = firstDay.getDay(); // 0=Sun,1=Mon,...
+                startDow = startDow === 0 ? 6 : startDow - 1; // convert to Mon=0
+
+                const today = new Date();
+                const todayStr = toDateInputValue(today);
+
+                grid.innerHTML = '';
+
+                // Empty cells before first day
+                for (let i = 0; i < startDow; i++) {
+                    const empty = document.createElement('div');
+                    empty.className = 'calendar-day empty';
+                    grid.appendChild(empty);
+                }
+
+                for (let d = 1; d <= lastDay.getDate(); d++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'calendar-day';
+                    const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    if (dateStr === todayStr) cell.classList.add('today');
+
+                    const dayData = dayMap[d];
+                    if (dayData && dayData.total > 0) {
+                        // Dominant category
+                        const domCat = Object.values(dayData.categoryTotals).reduce((a, b) => a.total >= b.total ? a : b, { total: 0, color: '#95a5a6' });
+                        const intensity = Math.min(0.85, (dayData.total / maxTotal) * 0.85);
+                        cell.style.background = hexToRgba(domCat.color, intensity);
+                        const textLight = intensity > 0.45;
+                        cell.style.color = textLight ? '#fff' : 'var(--text-color)';
+
+                        const numEl = document.createElement('div');
+                        numEl.className = 'calendar-day-num';
+                        numEl.textContent = d;
+                        const sumEl = document.createElement('div');
+                        sumEl.className = 'calendar-day-sum';
+                        sumEl.textContent = dayData.total >= 1000
+                            ? `${(dayData.total / 1000).toFixed(1)}к`
+                            : dayData.total.toFixed(0);
+                        cell.appendChild(numEl);
+                        cell.appendChild(sumEl);
+                    } else {
+                        cell.style.background = 'var(--surface-alt)';
+                        const numEl = document.createElement('div');
+                        numEl.className = 'calendar-day-num';
+                        numEl.textContent = d;
+                        cell.appendChild(numEl);
+                    }
+                    grid.appendChild(cell);
+                }
+
+                // Legend: unique categories in this month
+                const usedCats = {};
+                Object.values(dayMap).forEach(dd => {
+                    Object.values(dd.categoryTotals).forEach(ct => {
+                        usedCats[ct.name] = ct.color;
+                    });
+                });
+                legend.innerHTML = '';
+                Object.entries(usedCats).forEach(([name, color]) => {
+                    const item = document.createElement('div');
+                    item.className = 'calendar-legend-item';
+                    item.innerHTML = `<div class="calendar-legend-dot" style="background:${color}"></div><span>${escapeHtml(name)}</span>`;
+                    legend.appendChild(item);
+                });
+            };
+
+            document.getElementById('calendar-prev-btn')?.addEventListener('click', () => {
+                calendarMonth--;
+                if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+                renderCalendarView();
+            });
+            document.getElementById('calendar-next-btn')?.addEventListener('click', () => {
+                calendarMonth++;
+                if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+                renderCalendarView();
+            });
+
+            /* ======= QUICK ADD (умное распознавание) ======= */
+            const INCOME_KEYWORDS = ['зарплата','зп','аванс','бонус','премия','перевод','вернул','долг','выручка','продал','подарок','мама','папа','родители','брат','сестра','друг','получил'];
+            const CATEGORY_KEYWORDS = {
+                'продукты': ['молоко','хлеб','мясо','рыба','овощи','фрукты','яйца','масло','крупа','сыр','колбаса','напиток','сок','вода','кефир','творог','магнит','пятерочка','перекресток','лента','ашан','дикси','продукты'],
+                'кафе': ['кофе','чай','капучино','латте','кофейня','кафе','ресторан','бар','пицца','суши','бургер','фастфуд','шаурма','обед','ужин','завтрак','еда на вынос'],
+                'транспорт': ['автобус','трамвай','троллейбус','метро','электричка','поезд','самолет','билет','проезд'],
+                'такси': ['такси','убер','яндекс такси','яндекс.такси','lyft','bolt'],
+                'здоровье': ['аптека','лекарство','таблетки','врач','больница','клиника','медицина','витамин'],
+                'развлечения': ['кино','театр','концерт','игра','парк','аттракцион','выставка','музей','спорт'],
+                'подписки': ['подписка','netflix','spotify','youtube','яндекс','vk','telegram','apple','google','icloud','стриминг'],
+                'одежда': ['одежда','обувь','куртка','брюки','джинсы','рубашка','футболка','магазин'],
+                'дом': ['квартплата','коммунальные','электричество','газ','интернет','телефон','ремонт','мебель','посуда'],
+                'питомцы': ['корм','ветеринар','питомец','кошка','собака','зоомагазин'],
+            };
+
+            const classifyEntry = (text) => {
+                const lower = text.trim().toLowerCase();
+                if (!lower) return { type: qaType, categoryKeyword: null };
+
+                // check income
+                const isIncome = INCOME_KEYWORDS.some(kw => lower.includes(kw));
+                if (isIncome) return { type: 'income', categoryKeyword: null };
+
+                // check expense category
+                for (const [catKw, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+                    if (keywords.some(kw => lower.includes(kw)) || lower.includes(catKw)) {
+                        return { type: 'expense', categoryKeyword: catKw };
+                    }
+                }
+                return { type: 'expense', categoryKeyword: null };
+            };
+
+            const findCategoryByKeyword = (keyword) => {
+                if (!keyword) return null;
+                for (const cat of categoryById.values()) {
+                    if ((cat.name || '').toLowerCase().includes(keyword)) return cat;
+                }
+                return null;
+            };
+
+            const quickAddModal = document.getElementById('quick-add-modal');
+            const quickAddForm = document.getElementById('quick-add-form');
+            const qaDescInput = document.getElementById('qa-description');
+            const qaAmountInput = document.getElementById('qa-amount');
+            const qaDetectedHint = document.getElementById('qa-detected-hint');
+            const qaErrorDiv = document.getElementById('quick-add-error');
+            const qaTypeBtns = { expense: document.getElementById('qa-type-expense'), income: document.getElementById('qa-type-income') };
+
+            const setQaType = (type) => {
+                qaType = type;
+                qaTypeBtns.expense.classList.toggle('active', type === 'expense');
+                qaTypeBtns.income.classList.toggle('active', type === 'income');
+            };
+
+            qaTypeBtns.expense?.addEventListener('click', () => setQaType('expense'));
+            qaTypeBtns.income?.addEventListener('click', () => setQaType('income'));
+
+            const openQuickAdd = () => {
+                qaType = 'expense';
+                setQaType('expense');
+                quickAddForm.reset();
+                qaDetectedHint.textContent = '';
+                qaErrorDiv.textContent = '';
+                quickAddModal.style.display = 'block';
+                qaDescInput.focus();
+            };
+
+            document.getElementById('bottom-nav-plus')?.addEventListener('click', openQuickAdd);
+
+            qaDescInput?.addEventListener('input', () => {
+                const text = qaDescInput.value;
+                if (!text.trim()) { qaDetectedHint.textContent = ''; return; }
+                const result = classifyEntry(text);
+                setQaType(result.type);
+                const cat = result.categoryKeyword ? findCategoryByKeyword(result.categoryKeyword) : null;
+                if (result.type === 'income') {
+                    qaDetectedHint.textContent = '💰 Определено как доход';
+                } else if (cat) {
+                    qaDetectedHint.textContent = `🛒 Расход → категория «${cat.name}»`;
+                } else {
+                    qaDetectedHint.textContent = '🧾 Расход (категория не определена)';
+                }
+            });
+
+            quickAddForm?.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                qaErrorDiv.textContent = '';
+                const text = (qaDescInput.value || '').trim();
+                const amount = qaAmountInput.value;
+                const result = classifyEntry(text);
+                const today = getTodayDateString();
+                try {
+                    if (result.type === 'income') {
+                        const res = await apiFetch(`${API_URL}/incomes`, {
+                            method: 'POST',
+                            body: JSON.stringify({ amount, description: text || 'Доход', date: today }),
+                        });
+                        if (!res.ok) {
+                            const err = await res.json().catch(() => ({}));
+                            qaErrorDiv.textContent = err.message || 'Ошибка сохранения';
+                            return;
+                        }
+                    } else {
+                        const cat = result.categoryKeyword ? findCategoryByKeyword(result.categoryKeyword) : null;
+                        const firstCat = categoryById.values().next().value;
+                        const categoryId = cat?.id || firstCat?.id;
+                        if (!categoryId) { qaErrorDiv.textContent = 'Нет категорий. Создайте хотя бы одну.'; return; }
+                        const res = await apiFetch(`${API_URL}/expenses`, {
+                            method: 'POST',
+                            body: JSON.stringify({ amount, categoryId, description: text || '', date: today }),
+                        });
+                        if (!res.ok) {
+                            const err = await res.json().catch(() => ({}));
+                            qaErrorDiv.textContent = err.message || 'Ошибка сохранения';
+                            return;
+                        }
+                    }
+                    quickAddModal.style.display = 'none';
+                    await updateDashboard();
+                } catch (err) {
+                    qaErrorDiv.textContent = err.message || 'Ошибка';
+                }
+            });
 
             const renderRecentExpenses = () => {
                 recentExpenseList.innerHTML = '';
@@ -931,18 +1275,25 @@
                     const response = await apiFetch(`${API_URL}/expenses/${id}`);
                     if (!response.ok) return;
                     const data = await response.json();
-                    expenseModalTitle.textContent = 'Редактировать расход';
-                    expenseIdInput.value = data.id;
+                    openExpenseEditForm(data);
+                }
+
+                if (target.classList.contains('repeat-btn')) {
+                    const response = await apiFetch(`${API_URL}/expenses/${id}`);
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    expenseModalTitle.textContent = 'Повторить расход';
+                    expenseIdInput.value = ''; // new record
                     expenseAmountInput.value = data.amount;
-                    expenseDateInput.value = data.date;
-                    expenseDescriptionInput.value = data.description;
-                    expenseCategorySelect.value = data.category.id;
+                    expenseDateInput.value = getTodayDateString();
+                    expenseDescriptionInput.value = data.description || '';
+                    expenseCategorySelect.value = data.category?.id || '';
                     populateSubcategories(data.subcategory?.id);
-                    const isReceiptExpense = !!data.receipt;
-                    expenseAmountInput.readOnly = isReceiptExpense;
-                    expenseAmountHint.classList.toggle('hidden', !isReceiptExpense);
+                    expenseAmountInput.readOnly = false;
+                    expenseAmountHint.classList.add('hidden');
+                    expenseErrorDiv.textContent = '';
                     expenseModal.style.display = 'block';
-                    expenseDescriptionInput.focus();
+                    expenseAmountInput.focus();
                 }
             };
 
