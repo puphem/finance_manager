@@ -185,6 +185,14 @@
                     <label for="dark-theme-toggle">Темная тема</label>
                     <input type="checkbox" id="dark-theme-toggle">
                 </div>
+                <div class="form-group settings-token">
+                    <label for="receipt-api-token-input">Токен proverkachecka.com</label>
+                    <input type="text" id="receipt-api-token-input" placeholder="Введите персональный токен">
+                    <div class="field-hint">Используется при сканировании чеков. Если пусто — используется серверный токен.</div>
+                </div>
+                <div class="form-group">
+                    <button type="button" id="save-receipt-api-token-btn">Сохранить токен</button>
+                </div>
             </div>
         </section>
 
@@ -233,6 +241,20 @@
                 </div>
             </div>
             <div class="form-group"><label for="expense-description">Уточнение (необязательно):</label><input type="text" id="expense-description"></div>
+            <div class="form-group">
+                <label class="checkbox-label"><input type="checkbox" id="expense-recurring-enabled"> Повторять запись</label>
+            </div>
+            <div id="expense-recurring-options" class="form-group hidden">
+                <label for="expense-recurring-period">Периодичность</label>
+                <select id="expense-recurring-period">
+                    <option value="1">Каждый день</option>
+                    <option value="7">Каждую неделю</option>
+                    <option value="14">Каждые 2 недели</option>
+                    <option value="30">Каждый месяц</option>
+                    <option value="custom">Свой промежуток</option>
+                </select>
+                <input type="number" id="expense-recurring-custom-days" class="hidden" min="1" placeholder="Количество суток">
+            </div>
             <button type="submit">Сохранить</button>
         </form>
         <div id="expense-error-message" class="error-message"></div>
@@ -282,6 +304,20 @@
             <div class="form-group"><label for="income-amount">Сумма:</label><input type="number" id="income-amount" step="0.01" required></div>
             <div class="form-group"><label for="income-date">Дата:</label><input type="date" id="income-date" required></div>
             <div class="form-group"><label for="income-description">Описание (необязательно):</label><input type="text" id="income-description" placeholder="Например: Зарплата"></div>
+            <div class="form-group">
+                <label class="checkbox-label"><input type="checkbox" id="income-recurring-enabled"> Повторять запись</label>
+            </div>
+            <div id="income-recurring-options" class="form-group hidden">
+                <label for="income-recurring-period">Периодичность</label>
+                <select id="income-recurring-period">
+                    <option value="1">Каждый день</option>
+                    <option value="7">Каждую неделю</option>
+                    <option value="14">Каждые 2 недели</option>
+                    <option value="30">Каждый месяц</option>
+                    <option value="custom">Свой промежуток</option>
+                </select>
+                <input type="number" id="income-recurring-custom-days" class="hidden" min="1" placeholder="Количество суток">
+            </div>
             <button type="submit">Сохранить</button>
         </form>
         <div id="income-error-message" class="error-message"></div>
@@ -310,6 +346,22 @@
             <button type="submit">Добавить</button>
         </form>
         <div id="quick-add-error" class="error-message"></div>
+    </div>
+</div>
+
+<!-- Модальное окно диаграммы по дню -->
+<div id="calendar-day-chart-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <div class="day-chart-header">
+            <button id="day-chart-prev-btn" type="button">←</button>
+            <div id="day-chart-date-label"></div>
+            <button id="day-chart-next-btn" type="button">→</button>
+        </div>
+        <section id="day-chart-section">
+            <canvas id="day-expense-chart"></canvas>
+        </section>
+        <div id="day-chart-empty" class="field-hint hidden">За этот день нет расходов.</div>
     </div>
 </div>
 

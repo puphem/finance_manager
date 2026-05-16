@@ -43,7 +43,7 @@ public class ReceiptServiceImpl implements ReceiptService {
             throw new DuplicateResourceException("Этот чек уже был добавлен в траты.");
         }
 
-        FnsReceiptResponse fnsData = fnsApiClient.getReceiptDetails(requestDto.getQrCodeData());
+        FnsReceiptResponse fnsData = fnsApiClient.getReceiptDetails(requestDto.getQrCodeData(), requestDto.getApiToken());
         FnsReceiptResponse.ReceiptJson receiptJson = fnsData.getData() != null ? fnsData.getData().getJson() : null;
         if (receiptJson == null) {
             throw new IllegalStateException("Не удалось получить данные чека для добавления в траты.");

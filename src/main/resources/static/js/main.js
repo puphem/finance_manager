@@ -10,6 +10,8 @@
     const USERNAME_KEY = 'finance_username';
     const THEME_KEY = 'finance_theme';
     const FONT_SIZE_KEY = 'finance_font_size';
+    const RECEIPT_API_TOKEN_KEY = 'finance_receipt_api_token';
+    const RECURRING_RULES_KEY = 'finance_recurring_rules';
     const RECENT_EXPENSE_LIMIT = 7;
     const EXPENSES_PAGE_STEP = 20;
 
@@ -241,6 +243,8 @@
 
             const fontSizeSelect = getElement('font-size-select');
             const darkThemeToggle = getElement('dark-theme-toggle');
+            const receiptApiTokenInput = getElement('receipt-api-token-input');
+            const saveReceiptApiTokenBtn = getElement('save-receipt-api-token-btn');
 
             const expenseModal = getElement('expense-modal');
             const expenseForm = getElement('expense-form');
@@ -255,6 +259,10 @@
             const expenseDescriptionInput = getElement('expense-description');
             const expenseAmountInput = getElement('expense-amount');
             const expenseAmountHint = getElement('expense-amount-hint');
+            const expenseRecurringEnabled = getElement('expense-recurring-enabled');
+            const expenseRecurringOptions = getElement('expense-recurring-options');
+            const expenseRecurringPeriod = getElement('expense-recurring-period');
+            const expenseRecurringCustomDays = getElement('expense-recurring-custom-days');
 
             const categoryModal = getElement('category-modal');
             const addCategoryLink = getElement('add-category-link');
@@ -280,16 +288,29 @@
             const incomeModalTitle = getElement('income-modal-title');
             const incomeAmountInput = getElement('income-amount');
             const incomeDescriptionInput = getElement('income-description');
+            const incomeRecurringEnabled = getElement('income-recurring-enabled');
+            const incomeRecurringOptions = getElement('income-recurring-options');
+            const incomeRecurringPeriod = getElement('income-recurring-period');
+            const incomeRecurringCustomDays = getElement('income-recurring-custom-days');
+
+            const calendarDayChartModal = getElement('calendar-day-chart-modal');
+            const dayChartDateLabel = getElement('day-chart-date-label');
+            const dayChartPrevBtn = getElement('day-chart-prev-btn');
+            const dayChartNextBtn = getElement('day-chart-next-btn');
+            const dayExpenseChartCanvas = getElement('day-expense-chart');
+            const dayChartEmpty = getElement('day-chart-empty');
 
             const logoutBtn = getElement('logout-btn');
             logoutBtn.addEventListener('click', logout);
 
             const initialTheme = localStorage.getItem(THEME_KEY) || 'light';
             const initialFontSize = localStorage.getItem(FONT_SIZE_KEY) || 'normal';
+            const initialReceiptApiToken = localStorage.getItem(RECEIPT_API_TOKEN_KEY) || '';
             applyTheme(initialTheme);
             applyFontSize(initialFontSize);
             darkThemeToggle.checked = initialTheme === 'dark';
             fontSizeSelect.value = initialFontSize;
+            receiptApiTokenInput.value = initialReceiptApiToken;
 
             darkThemeToggle.addEventListener('change', () => {
                 applyTheme(darkThemeToggle.checked ? 'dark' : 'light');
@@ -297,6 +318,17 @@
 
             fontSizeSelect.addEventListener('change', () => {
                 applyFontSize(fontSizeSelect.value);
+            });
+
+            saveReceiptApiTokenBtn.addEventListener('click', () => {
+                const token = (receiptApiTokenInput.value || '').trim();
+                localStorage.setItem(RECEIPT_API_TOKEN_KEY, token);
+                dashboardErrorDiv.textContent = token
+                    ? 'Токен для proverkachecka.com сохранен.'
+                    : 'Токен очищен. Используется серверный токен.';
+                setTimeout(() => {
+                    if (dashboardErrorDiv.textContent.includes('Токен')) dashboardErrorDiv.textContent = '';
+                }, 3000);
             });
 
             const setActiveView = (viewId) => {
@@ -341,6 +373,8 @@
             let calendarMonth = new Date().getMonth();
             let calendarExpensesCache = null;
             let qaType = 'expense';
+            let dayChartDate = null;
+            let dayExpenseChart = null;
 
             const renderPalettes = () => {
                 iconPicker.innerHTML = ICONS.map(icon => `<div class="icon-option" data-icon="${icon}"><i class="${icon}"></i></div>`).join('');
@@ -492,6 +526,73 @@
                 return adjustHexColor(categoryColor || '#95a5a6', shift);
             };
 
+            const formatDateHeaderRu = (isoDate) => {
+                const date = new Date(`${isoDate}T00:00:00`);
+                return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' });
+            };
+
+            const getRecurringIntervalDays = (periodValue, customValue) => {
+                if (periodValue === 'custom') {
+                    const parsed = Number(customValue);
+                    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+                }
+                const parsed = Number(periodValue);
+                return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+            };
+
+            const getStoredRecurringRules = () => {
+                try {
+                    const parsed = JSON.parse(localStorage.getItem(RECURRING_RULES_KEY) || '[]');
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (_) {
+                    return [];
+                }
+            };
+
+            const saveRecurringRules = (rules) => {
+                localStorage.setItem(RECURRING_RULES_KEY, JSON.stringify(rules));
+            };
+
+            const addRecurringRule = (rule) => {
+                const rules = getStoredRecurringRules();
+                rules.push(rule);
+                saveRecurringRules(rules);
+            };
+
+            const processRecurringRules = async () => {
+                const rules = getStoredRecurringRules();
+                if (rules.length === 0) return;
+                const today = new Date();
+                const todayIso = toDateInputValue(today);
+                let changed = false;
+
+                for (const rule of rules) {
+                    const intervalDays = Number(rule.intervalDays || 0);
+                    if (!intervalDays || intervalDays < 1) continue;
+                    let cursor = new Date(`${rule.lastRunDate}T00:00:00`);
+                    if (Number.isNaN(cursor.getTime())) continue;
+
+                    while (true) {
+                        cursor.setDate(cursor.getDate() + intervalDays);
+                        const nextIso = toDateInputValue(cursor);
+                        if (nextIso > todayIso) break;
+
+                        const endpoint = rule.type === 'income' ? `${API_URL}/incomes` : `${API_URL}/expenses`;
+                        const payload = { ...rule.payload, date: nextIso };
+                        const response = await apiFetch(endpoint, {
+                            method: 'POST',
+                            body: JSON.stringify(payload),
+                        });
+                        if (!response.ok) break;
+                        rule.lastRunDate = nextIso;
+                        changed = true;
+                    }
+                }
+
+                saveRecurringRules(rules);
+                if (changed) await refreshAllExpenses();
+            };
+
             const renderExpenseRow = (expense, index) => {
                 const item = document.createElement('li');
                 item.classList.add('swipeable');
@@ -531,7 +632,7 @@
                 let startX = 0;
                 let currentX = 0;
                 let swiping = false;
-                const THRESHOLD = 65;
+                const THRESHOLD = 100;
 
                 const reset = () => {
                     item.style.transform = '';
@@ -588,6 +689,10 @@
                 const isReceiptExpense = !!data.receipt;
                 expenseAmountInput.readOnly = isReceiptExpense;
                 expenseAmountHint.classList.toggle('hidden', !isReceiptExpense);
+                expenseRecurringEnabled.checked = false;
+                expenseRecurringPeriod.value = '1';
+                expenseRecurringCustomDays.value = '';
+                updateRecurringUiState('expense');
                 expenseErrorDiv.textContent = '';
                 expenseModal.style.display = 'block';
                 expenseDescriptionInput.focus();
@@ -698,6 +803,8 @@
                         numEl.textContent = d;
                         cell.appendChild(numEl);
                     }
+                    cell.dataset.date = dateStr;
+                    cell.addEventListener('click', () => openDayChart(dateStr));
                     grid.appendChild(cell);
                 }
 
@@ -716,6 +823,77 @@
                     legend.appendChild(item);
                 });
             };
+
+            const renderDayExpenseChart = (targetDateIso) => {
+                dayChartDate = targetDateIso;
+                const targetDate = new Date(`${targetDateIso}T00:00:00`);
+                dayChartDateLabel.textContent = targetDate.toLocaleDateString('ru-RU', {
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric',
+                });
+
+                const dayExpenses = allExpensesCache.filter(exp => (exp.date || '').slice(0, 10) === targetDateIso);
+                const byCategory = new Map();
+                dayExpenses.forEach(exp => {
+                    const key = Number(exp.category?.id || 0);
+                    const amount = Number(exp.amount || 0);
+                    if (!byCategory.has(key)) {
+                        byCategory.set(key, {
+                            label: exp.category?.name || 'Без категории',
+                            color: exp.category?.color || '#95a5a6',
+                            total: 0,
+                        });
+                    }
+                    byCategory.get(key).total += amount;
+                });
+
+                const summary = Array.from(byCategory.values()).sort((a, b) => b.total - a.total);
+                if (dayExpenseChart) dayExpenseChart.destroy();
+
+                if (summary.length === 0) {
+                    dayChartEmpty.classList.remove('hidden');
+                    dayExpenseChartCanvas.classList.add('hidden');
+                    return;
+                }
+
+                dayChartEmpty.classList.add('hidden');
+                dayExpenseChartCanvas.classList.remove('hidden');
+                dayExpenseChart = new Chart(dayExpenseChartCanvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels: summary.map(item => item.label),
+                        datasets: [{
+                            data: summary.map(item => Number(item.total.toFixed(2))),
+                            backgroundColor: summary.map(item => item.color),
+                            borderColor: '#fff',
+                            borderWidth: 2,
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'top' },
+                            title: { display: true, text: 'Расходы за день' },
+                        },
+                    },
+                });
+            };
+
+            const openDayChart = (targetDateIso) => {
+                renderDayExpenseChart(targetDateIso);
+                calendarDayChartModal.style.display = 'block';
+            };
+
+            const shiftDayChartDate = (deltaDays) => {
+                if (!dayChartDate) return;
+                const date = new Date(`${dayChartDate}T00:00:00`);
+                date.setDate(date.getDate() + deltaDays);
+                renderDayExpenseChart(toDateInputValue(date));
+            };
+
+            dayChartPrevBtn.addEventListener('click', () => shiftDayChartDate(-1));
+            dayChartNextBtn.addEventListener('click', () => shiftDayChartDate(1));
 
             document.getElementById('calendar-prev-btn')?.addEventListener('click', () => {
                 calendarMonth--;
@@ -865,7 +1043,18 @@
             const renderExpensesPage = () => {
                 expensesPageList.innerHTML = '';
                 const visible = filteredExpensesPage.slice(0, expensesVisibleCount);
-                visible.forEach((expense, index) => expensesPageList.appendChild(renderExpenseRow(expense, index)));
+                let lastDate = '';
+                visible.forEach((expense, index) => {
+                    const expenseDate = (expense.date || '').slice(0, 10);
+                    if (expenseDate && expenseDate !== lastDate) {
+                        const separator = document.createElement('li');
+                        separator.className = 'expense-date-separator';
+                        separator.innerHTML = `<span>${formatDateHeaderRu(expenseDate)}</span>`;
+                        expensesPageList.appendChild(separator);
+                        lastDate = expenseDate;
+                    }
+                    expensesPageList.appendChild(renderExpenseRow(expense, index));
+                });
 
                 expensesPageSummary.textContent = `Найдено: ${filteredExpensesPage.length}`;
                 expensesPageLoadMoreBtn.classList.toggle('hidden', filteredExpensesPage.length <= expensesVisibleCount);
@@ -1014,9 +1203,13 @@
 
             const sendQrDataToServer = async (qrData) => {
                 try {
+                    const receiptApiToken = (localStorage.getItem(RECEIPT_API_TOKEN_KEY) || '').trim();
                     const response = await apiFetch(`${API_URL}/receipts/scan`, {
                         method: 'POST',
-                        body: JSON.stringify({ qrCodeData: qrData }),
+                        body: JSON.stringify({
+                            qrCodeData: qrData,
+                            apiToken: receiptApiToken || null,
+                        }),
                     });
                     if (response.status === 201) {
                         const scannedReceipt = await response.json();
@@ -1046,6 +1239,21 @@
                 }
             };
 
+            const updateRecurringUiState = (type) => {
+                const isExpense = type === 'expense';
+                const enabled = isExpense ? expenseRecurringEnabled.checked : incomeRecurringEnabled.checked;
+                const options = isExpense ? expenseRecurringOptions : incomeRecurringOptions;
+                const period = isExpense ? expenseRecurringPeriod : incomeRecurringPeriod;
+                const customDays = isExpense ? expenseRecurringCustomDays : incomeRecurringCustomDays;
+                options.classList.toggle('hidden', !enabled);
+                customDays.classList.toggle('hidden', period.value !== 'custom');
+            };
+
+            expenseRecurringEnabled.addEventListener('change', () => updateRecurringUiState('expense'));
+            incomeRecurringEnabled.addEventListener('change', () => updateRecurringUiState('income'));
+            expenseRecurringPeriod.addEventListener('change', () => updateRecurringUiState('expense'));
+            incomeRecurringPeriod.addEventListener('change', () => updateRecurringUiState('income'));
+
             addExpenseBtn.addEventListener('click', () => {
                 expenseModalTitle.textContent = 'Добавить новый расход';
                 expenseIdInput.value = '';
@@ -1055,6 +1263,10 @@
                 expenseDateInput.value = getTodayDateString();
                 expenseAmountInput.readOnly = false;
                 expenseAmountHint.classList.add('hidden');
+                expenseRecurringEnabled.checked = false;
+                expenseRecurringPeriod.value = '1';
+                expenseRecurringCustomDays.value = '';
+                updateRecurringUiState('expense');
                 populateSubcategories();
                 expenseModal.style.display = 'block';
                 expenseAmountInput.focus();
@@ -1066,6 +1278,10 @@
                 incomeErrorDiv.textContent = '';
                 incomeForm.reset();
                 incomeDateInput.value = getTodayDateString();
+                incomeRecurringEnabled.checked = false;
+                incomeRecurringPeriod.value = '1';
+                incomeRecurringCustomDays.value = '';
+                updateRecurringUiState('income');
                 incomeModal.style.display = 'block';
             });
 
@@ -1138,23 +1354,43 @@
                 const id = expenseIdInput.value;
                 const url = id ? `${API_URL}/expenses/${id}` : `${API_URL}/expenses`;
                 const method = id ? 'PUT' : 'POST';
+                const payload = {
+                    amount: expenseAmountInput.value,
+                    categoryId: expenseCategorySelect.value,
+                    subcategoryId: expenseSubcategorySelect.value || null,
+                    description: expenseDescriptionInput.value,
+                    date: expenseDateInput.value,
+                };
 
                 try {
                     const response = await apiFetch(url, {
                         method,
-                        body: JSON.stringify({
-                            amount: expenseAmountInput.value,
-                            categoryId: expenseCategorySelect.value,
-                            subcategoryId: expenseSubcategorySelect.value || null,
-                            description: expenseDescriptionInput.value,
-                            date: expenseDateInput.value,
-                        }),
+                        body: JSON.stringify(payload),
                     });
 
                     if (!response.ok) {
                         const errorData = await response.json().catch(() => ({}));
                         expenseErrorDiv.textContent = `Ошибка: ${errorData.message || 'Неизвестная ошибка'}`;
                         return;
+                    }
+
+                    if (!id && expenseRecurringEnabled.checked) {
+                        const intervalDays = getRecurringIntervalDays(expenseRecurringPeriod.value, expenseRecurringCustomDays.value);
+                        if (!intervalDays) {
+                            expenseErrorDiv.textContent = 'Укажите корректную периодичность повторения.';
+                            return;
+                        }
+                        addRecurringRule({
+                            type: 'expense',
+                            intervalDays,
+                            lastRunDate: payload.date,
+                            payload: {
+                                amount: payload.amount,
+                                categoryId: payload.categoryId,
+                                subcategoryId: payload.subcategoryId,
+                                description: payload.description,
+                            },
+                        });
                     }
 
                     expenseModal.style.display = 'none';
@@ -1170,19 +1406,37 @@
                 const id = incomeIdInput.value;
                 const url = id ? `${API_URL}/incomes/${id}` : `${API_URL}/incomes`;
                 const method = id ? 'PUT' : 'POST';
+                const payload = {
+                    amount: incomeAmountInput.value,
+                    description: incomeDescriptionInput.value,
+                    date: incomeDateInput.value,
+                };
                 try {
                     const response = await apiFetch(url, {
                         method,
-                        body: JSON.stringify({
-                            amount: incomeAmountInput.value,
-                            description: incomeDescriptionInput.value,
-                            date: incomeDateInput.value,
-                        }),
+                        body: JSON.stringify(payload),
                     });
                     if (!response.ok) {
                         const errorData = await response.json().catch(() => ({}));
                         incomeErrorDiv.textContent = `Ошибка: ${errorData.message || 'Неизвестная ошибка'}`;
                         return;
+                    }
+
+                    if (!id && incomeRecurringEnabled.checked) {
+                        const intervalDays = getRecurringIntervalDays(incomeRecurringPeriod.value, incomeRecurringCustomDays.value);
+                        if (!intervalDays) {
+                            incomeErrorDiv.textContent = 'Укажите корректную периодичность повторения.';
+                            return;
+                        }
+                        addRecurringRule({
+                            type: 'income',
+                            intervalDays,
+                            lastRunDate: payload.date,
+                            payload: {
+                                amount: payload.amount,
+                                description: payload.description,
+                            },
+                        });
                     }
                     incomeModal.style.display = 'none';
                     await updateDashboard();
@@ -1291,6 +1545,10 @@
                     populateSubcategories(data.subcategory?.id);
                     expenseAmountInput.readOnly = false;
                     expenseAmountHint.classList.add('hidden');
+                    expenseRecurringEnabled.checked = false;
+                    expenseRecurringPeriod.value = '1';
+                    expenseRecurringCustomDays.value = '';
+                    updateRecurringUiState('expense');
                     expenseErrorDiv.textContent = '';
                     expenseModal.style.display = 'block';
                     expenseAmountInput.focus();
@@ -1327,11 +1585,14 @@
             });
 
             renderPalettes();
+            updateRecurringUiState('expense');
+            updateRecurringUiState('income');
             applyPresetDates(expensesPagePreset);
             chartFilterButtons.querySelectorAll('button').forEach(btn => btn.classList.toggle('active', btn.dataset.period === currentChartPeriod));
             expensesFilterPresets.querySelectorAll('button').forEach(btn => btn.classList.toggle('active', btn.dataset.preset === expensesPagePreset));
 
             await fetchCategories();
+            await processRecurringRules();
             await updateDashboard();
             setActiveView('dashboard-view');
 

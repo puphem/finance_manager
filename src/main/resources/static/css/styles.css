@@ -652,6 +652,34 @@ select {
 /* ============ REPEAT BUTTON ============ */
 .repeat-btn { background-color: #5b5ea6; }
 
+.expense-date-separator {
+    background: transparent;
+    border: none;
+    margin: 12px 0 4px;
+    padding: 0;
+}
+
+.expense-date-separator span {
+    display: block;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 6px;
+    font-weight: 700;
+    color: var(--muted-color);
+    font-size: 0.9rem;
+}
+
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+}
+
 /* ============ QUICK ADD MODAL ============ */
 #quick-add-type-row {
     display: flex;
@@ -774,6 +802,44 @@ select {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+}
+
+.day-chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+#day-chart-date-label {
+    font-weight: 700;
+    color: var(--text-color);
+    text-align: right;
+    flex: 1;
+}
+
+#day-chart-prev-btn,
+#day-chart-next-btn {
+    background: var(--surface-alt);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    min-height: 34px;
+    padding: 6px 12px;
+}
+
+#day-chart-section {
+    min-height: 240px;
+}
+
+#day-expense-chart {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 320px;
+}
+
+.settings-token {
+    grid-column: 1 / -1;
 }
 
 .calendar-legend-item {

@@ -36,15 +36,20 @@ public class FnsApiClient {
     private String apiBaseUrl;
 
     public FnsReceiptResponse getReceiptDetails(String qrCodeData) {
-        FnsReceiptResponse apiResponse = tryLoadReceiptFromApi(qrCodeData);
+        return getReceiptDetails(qrCodeData, null);
+    }
+
+    public FnsReceiptResponse getReceiptDetails(String qrCodeData, String requestToken) {
+        String effectiveToken = (requestToken != null && !requestToken.isBlank()) ? requestToken : apiToken;
+        FnsReceiptResponse apiResponse = tryLoadReceiptFromApi(qrCodeData, effectiveToken);
         if (isUsable(apiResponse)) {
             return apiResponse;
         }
         return buildFallbackResponseFromQr(qrCodeData);
     }
 
-    private FnsReceiptResponse tryLoadReceiptFromApi(String qrCodeData) {
-        if (apiToken == null || apiToken.isBlank()) {
+    private FnsReceiptResponse tryLoadReceiptFromApi(String qrCodeData, String effectiveToken) {
+        if (effectiveToken == null || effectiveToken.isBlank()) {
             return null;
         }
 
@@ -55,7 +60,7 @@ public class FnsApiClient {
                     .post()
                     .uri("/api/v1/check/get")
                     .bodyValue(Map.of(
-                            "token", apiToken,
+                            "token", effectiveToken,
                             "qrraw", qrCodeData
                     ))
                     .retrieve()
