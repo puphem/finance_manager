@@ -10,7 +10,6 @@
     const USERNAME_KEY = 'finance_username';
     const THEME_KEY = 'finance_theme';
     const FONT_SIZE_KEY = 'finance_font_size';
-    const RECEIPT_API_TOKEN_KEY = 'finance_receipt_api_token';
     const RECURRING_RULES_KEY = 'finance_recurring_rules';
     const RECENT_EXPENSE_LIMIT = 7;
     const EXPENSES_PAGE_STEP = 20;
@@ -305,12 +304,11 @@
 
             const initialTheme = localStorage.getItem(THEME_KEY) || 'light';
             const initialFontSize = localStorage.getItem(FONT_SIZE_KEY) || 'normal';
-            const initialReceiptApiToken = localStorage.getItem(RECEIPT_API_TOKEN_KEY) || '';
             applyTheme(initialTheme);
             applyFontSize(initialFontSize);
             darkThemeToggle.checked = initialTheme === 'dark';
             fontSizeSelect.value = initialFontSize;
-            receiptApiTokenInput.value = initialReceiptApiToken;
+            receiptApiTokenInput.value = '';
 
             darkThemeToggle.addEventListener('change', () => {
                 applyTheme(darkThemeToggle.checked ? 'dark' : 'light');
@@ -322,9 +320,9 @@
 
             saveReceiptApiTokenBtn.addEventListener('click', () => {
                 const token = (receiptApiTokenInput.value || '').trim();
-                localStorage.setItem(RECEIPT_API_TOKEN_KEY, token);
+                receiptApiTokenValue = token;
                 dashboardErrorDiv.textContent = token
-                    ? 'Токен для proverkachecka.com сохранен.'
+                    ? 'Токен для proverkachecka.com сохранен в текущей сессии.'
                     : 'Токен очищен. Используется серверный токен.';
                 setTimeout(() => {
                     if (dashboardErrorDiv.textContent.includes('Токен')) dashboardErrorDiv.textContent = '';
@@ -375,6 +373,7 @@
             let qaType = 'expense';
             let dayChartDate = null;
             let dayExpenseChart = null;
+            let receiptApiTokenValue = '';
 
             const renderPalettes = () => {
                 iconPicker.innerHTML = ICONS.map(icon => `<div class="icon-option" data-icon="${icon}"><i class="${icon}"></i></div>`).join('');
@@ -1203,12 +1202,11 @@
 
             const sendQrDataToServer = async (qrData) => {
                 try {
-                    const receiptApiToken = (localStorage.getItem(RECEIPT_API_TOKEN_KEY) || '').trim();
                     const response = await apiFetch(`${API_URL}/receipts/scan`, {
                         method: 'POST',
                         body: JSON.stringify({
                             qrCodeData: qrData,
-                            apiToken: receiptApiToken || null,
+                            apiToken: receiptApiTokenValue || null,
                         }),
                     });
                     if (response.status === 201) {
