@@ -1,5 +1,6 @@
 package com.example.financemanager.service.impl;
 
+import com.example.financemanager.config.AppDefaults;
 import com.example.financemanager.dto.CategoryRequestDto;
 import com.example.financemanager.dto.CategoryResponseDto;
 import com.example.financemanager.dto.SubcategoryRequestDto;
@@ -31,9 +32,6 @@ import java.util.stream.Collectors;
 public class CategoryServiceImpl implements CategoryService {
 
     private static final Map<String, List<String>> DEFAULT_SUBCATEGORIES = createDefaultSubcategories();
-    private static final String MISC_CATEGORY_NAME = "Прочее";
-    private static final String MISC_CATEGORY_COLOR = "#7f8c8d";
-    private static final String MISC_CATEGORY_ICON = "fas fa-box-open";
     private final CategoryRepository categoryRepository;
     private final SubcategoryRepository subcategoryRepository;
     private final CategoryMapper categoryMapper;
@@ -138,12 +136,12 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     private void ensureMiscCategory(User user) {
-        Category miscCategory = categoryRepository.findByNameIgnoreCaseAndUser(MISC_CATEGORY_NAME, user)
+        Category miscCategory = categoryRepository.findByNameIgnoreCaseAndUser(AppDefaults.MISC_CATEGORY_NAME, user)
                 .orElseGet(() -> {
                     Category category = new Category();
-                    category.setName(MISC_CATEGORY_NAME);
-                    category.setColor(MISC_CATEGORY_COLOR);
-                    category.setIcon(MISC_CATEGORY_ICON);
+                    category.setName(AppDefaults.MISC_CATEGORY_NAME);
+                    category.setColor(AppDefaults.MISC_CATEGORY_COLOR);
+                    category.setIcon(AppDefaults.MISC_CATEGORY_ICON);
                     category.setUser(user);
                     return categoryRepository.save(category);
                 });

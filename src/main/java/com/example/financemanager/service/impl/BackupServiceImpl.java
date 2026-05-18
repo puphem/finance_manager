@@ -1,5 +1,6 @@
 package com.example.financemanager.service.impl;
 
+import com.example.financemanager.config.AppDefaults;
 import com.example.financemanager.dto.BackupSnapshotDto;
 import com.example.financemanager.entity.Category;
 import com.example.financemanager.entity.Expense;
@@ -27,10 +28,6 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class BackupServiceImpl implements BackupService {
-
-    private static final String FALLBACK_CATEGORY_NAME = "Прочее";
-    private static final String FALLBACK_CATEGORY_COLOR = "#7f8c8d";
-    private static final String FALLBACK_CATEGORY_ICON = "fas fa-box-open";
 
     private final CategoryRepository categoryRepository;
     private final SubcategoryRepository subcategoryRepository;
@@ -66,7 +63,7 @@ public class BackupServiceImpl implements BackupService {
             dto.setAmount(expense.getAmount());
             dto.setDate(expense.getDate());
             dto.setDescription(expense.getDescription());
-            dto.setCategoryName(expense.getCategory() != null ? expense.getCategory().getName() : FALLBACK_CATEGORY_NAME);
+            dto.setCategoryName(expense.getCategory() != null ? expense.getCategory().getName() : AppDefaults.MISC_CATEGORY_NAME);
             dto.setSubcategoryName(expense.getSubcategory() != null ? expense.getSubcategory().getName() : null);
             return dto;
         }).collect(Collectors.toList()));
@@ -106,8 +103,8 @@ public class BackupServiceImpl implements BackupService {
 
             Category category = new Category();
             category.setName(categoryName);
-            category.setColor(trimOrDefault(categoryDto.getColor(), FALLBACK_CATEGORY_COLOR));
-            category.setIcon(trimOrDefault(categoryDto.getIcon(), FALLBACK_CATEGORY_ICON));
+            category.setColor(trimOrDefault(categoryDto.getColor(), AppDefaults.MISC_CATEGORY_COLOR));
+            category.setIcon(trimOrDefault(categoryDto.getIcon(), AppDefaults.MISC_CATEGORY_ICON));
             category.setUser(user);
             Category savedCategory = categoryRepository.save(category);
             categoriesByName.put(key, savedCategory);
@@ -128,15 +125,15 @@ public class BackupServiceImpl implements BackupService {
             }
         }
 
-        Category fallbackCategory = categoriesByName.get(normalize(FALLBACK_CATEGORY_NAME));
+        Category fallbackCategory = categoriesByName.get(normalize(AppDefaults.MISC_CATEGORY_NAME));
         if (fallbackCategory == null) {
             Category category = new Category();
-            category.setName(FALLBACK_CATEGORY_NAME);
-            category.setColor(FALLBACK_CATEGORY_COLOR);
-            category.setIcon(FALLBACK_CATEGORY_ICON);
+            category.setName(AppDefaults.MISC_CATEGORY_NAME);
+            category.setColor(AppDefaults.MISC_CATEGORY_COLOR);
+            category.setIcon(AppDefaults.MISC_CATEGORY_ICON);
             category.setUser(user);
             fallbackCategory = categoryRepository.save(category);
-            categoriesByName.put(normalize(FALLBACK_CATEGORY_NAME), fallbackCategory);
+            categoriesByName.put(normalize(AppDefaults.MISC_CATEGORY_NAME), fallbackCategory);
         }
 
         Map<Long, Map<String, Subcategory>> subcategoriesByCategory = new HashMap<>();
@@ -154,7 +151,7 @@ public class BackupServiceImpl implements BackupService {
             if (expenseDto.getAmount() == null || expenseDto.getDate() == null) {
                 continue;
             }
-            Category category = categoriesByName.getOrDefault(normalize(trimOrDefault(expenseDto.getCategoryName(), FALLBACK_CATEGORY_NAME)), fallbackCategory);
+            Category category = categoriesByName.getOrDefault(normalize(trimOrDefault(expenseDto.getCategoryName(), AppDefaults.MISC_CATEGORY_NAME)), fallbackCategory);
 
             Expense expense = new Expense();
             expense.setAmount(expenseDto.getAmount());
