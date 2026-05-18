@@ -31,6 +31,9 @@ import java.util.stream.Collectors;
 public class CategoryServiceImpl implements CategoryService {
 
     private static final Map<String, List<String>> DEFAULT_SUBCATEGORIES = createDefaultSubcategories();
+    private static final String MISC_CATEGORY_NAME = "Прочее";
+    private static final String MISC_CATEGORY_COLOR = "#7f8c8d";
+    private static final String MISC_CATEGORY_ICON = "fas fa-box-open";
     private final CategoryRepository categoryRepository;
     private final SubcategoryRepository subcategoryRepository;
     private final CategoryMapper categoryMapper;
@@ -75,6 +78,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public List<CategoryResponseDto> getAllCategories() {
         User user = currentUserResolver.getCurrentUser();
+        ensureMiscCategory(user);
         List<Category> categories = categoryRepository.findAllByUser(user);
         categories.forEach(category -> ensureDefaultSubcategories(category, user));
         return categories.stream()
@@ -131,6 +135,19 @@ public class CategoryServiceImpl implements CategoryService {
             subcategoryRepository.save(subcategory);
             existingNames.add(normalized);
         }
+    }
+
+    private void ensureMiscCategory(User user) {
+        Category miscCategory = categoryRepository.findByNameIgnoreCaseAndUser(MISC_CATEGORY_NAME, user)
+                .orElseGet(() -> {
+                    Category category = new Category();
+                    category.setName(MISC_CATEGORY_NAME);
+                    category.setColor(MISC_CATEGORY_COLOR);
+                    category.setIcon(MISC_CATEGORY_ICON);
+                    category.setUser(user);
+                    return categoryRepository.save(category);
+                });
+        ensureDefaultSubcategories(miscCategory, user);
     }
 
     private List<String> resolveDefaultSubcategoryNames(String categoryName) {

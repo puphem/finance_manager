@@ -50,6 +50,12 @@
         localStorage.setItem(FONT_SIZE_KEY, nextSize);
     };
 
+    const getFontScaleValue = () => {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue('--font-scale');
+        const parsed = Number.parseFloat(raw);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    };
+
     const registerPwaSupport = async () => {
         if (!('serviceWorker' in navigator)) return;
         try {
@@ -228,6 +234,8 @@
             const recentExpenseList = getElement('recent-expense-list');
             const openAllExpensesBtn = getElement('open-all-expenses-btn');
             const backToDashboardBtn = getElement('back-to-dashboard-btn');
+            const toggleExpensesFiltersBtn = getElement('toggle-expenses-filters-btn');
+            const expensesFiltersPanel = getElement('expenses-filters-panel');
 
             const expensesPageList = getElement('expenses-page-list');
             const expensesPageSummary = getElement('expenses-page-summary');
@@ -244,6 +252,9 @@
             const darkThemeToggle = getElement('dark-theme-toggle');
             const receiptApiTokenInput = getElement('receipt-api-token-input');
             const saveReceiptApiTokenBtn = getElement('save-receipt-api-token-btn');
+            const exportBackupBtn = getElement('export-backup-btn');
+            const importBackupBtn = getElement('import-backup-btn');
+            const importBackupFileInput = getElement('import-backup-file-input');
 
             const expenseModal = getElement('expense-modal');
             const expenseForm = getElement('expense-form');
@@ -298,6 +309,8 @@
             const dayChartNextBtn = getElement('day-chart-next-btn');
             const dayExpenseChartCanvas = getElement('day-expense-chart');
             const dayChartEmpty = getElement('day-chart-empty');
+            const toggleDayExpensesBtn = getElement('toggle-day-expenses-btn');
+            const dayExpensesList = getElement('day-expenses-list');
 
             const logoutBtn = getElement('logout-btn');
             logoutBtn.addEventListener('click', logout);
@@ -316,6 +329,12 @@
 
             fontSizeSelect.addEventListener('change', () => {
                 applyFontSize(fontSizeSelect.value);
+                if (expenseChart) {
+                    updateDashboard().catch(() => {});
+                }
+                if (dayChartDate) {
+                    renderDayExpenseChart(dayChartDate);
+                }
             });
 
             saveReceiptApiTokenBtn.addEventListener('click', () => {
@@ -327,6 +346,56 @@
                 setTimeout(() => {
                     if (dashboardErrorDiv.textContent.includes('Токен')) dashboardErrorDiv.textContent = '';
                 }, 3000);
+            });
+
+            toggleExpensesFiltersBtn.addEventListener('click', () => {
+                const isHidden = expensesFiltersPanel.classList.toggle('hidden');
+                toggleExpensesFiltersBtn.textContent = isHidden ? 'Показать фильтры' : 'Скрыть фильтры';
+            });
+
+            exportBackupBtn.addEventListener('click', async () => {
+                try {
+                    const response = await apiFetch(`${API_URL}/backup/export`);
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        throw new Error(err.message || 'Не удалось экспортировать backup');
+                    }
+                    const data = await response.json();
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `finance-backup-${getTodayDateString()}.json`;
+                    document.body.appendChild(link);
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                    link.remove();
+                } catch (error) {
+                    dashboardErrorDiv.textContent = error.message || 'Ошибка экспорта backup';
+                }
+            });
+
+            importBackupBtn.addEventListener('click', () => importBackupFileInput.click());
+            importBackupFileInput.addEventListener('change', async () => {
+                const file = importBackupFileInput.files?.[0];
+                if (!file) return;
+                try {
+                    const text = await file.text();
+                    const payload = JSON.parse(text);
+                    const response = await apiFetch(`${API_URL}/backup/import`, {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                    });
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        throw new Error(err.message || 'Не удалось импортировать backup');
+                    }
+                    importBackupFileInput.value = '';
+                    await fetchCategories();
+                    await updateDashboard();
+                    dashboardErrorDiv.textContent = 'Backup успешно импортирован.';
+                } catch (error) {
+                    dashboardErrorDiv.textContent = error.message || 'Ошибка импорта backup';
+                }
             });
 
             const setActiveView = (viewId) => {
@@ -373,6 +442,8 @@
             let qaType = 'expense';
             let dayChartDate = null;
             let dayExpenseChart = null;
+            let dayChartMode = 'category';
+            let dayChartSelectedCategoryId = null;
             let receiptApiTokenValue = '';
 
             const renderPalettes = () => {
@@ -503,12 +574,6 @@
                 } else if (preset === 'month') {
                     start = new Date(today);
                     start.setDate(start.getDate() - 29);
-                } else if (preset === 'custom') {
-                    if (!expensesFilterStart.value || !expensesFilterEnd.value) {
-                        expensesFilterStart.value = toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1));
-                        expensesFilterEnd.value = toDateInputValue(today);
-                    }
-                    return;
                 } else {
                     expensesFilterStart.value = '';
                     expensesFilterEnd.value = '';
@@ -528,6 +593,23 @@
             const formatDateHeaderRu = (isoDate) => {
                 const date = new Date(`${isoDate}T00:00:00`);
                 return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' });
+            };
+
+            const getChartFontSizes = () => {
+                const scale = getFontScaleValue();
+                return {
+                    legend: Math.max(11, Math.round(12 * scale)),
+                    title: Math.max(12, Math.round(14 * scale)),
+                    center: Math.max(12, Math.round(14 * scale)),
+                };
+            };
+
+            const findOtherCategory = () => {
+                for (const cat of categoryById.values()) {
+                    const name = (cat.name || '').trim().toLowerCase();
+                    if (name === 'прочее') return cat;
+                }
+                return null;
             };
 
             const getRecurringIntervalDays = (periodValue, customValue) => {
@@ -833,22 +915,65 @@
                 });
 
                 const dayExpenses = allExpensesCache.filter(exp => (exp.date || '').slice(0, 10) === targetDateIso);
+                const chartFont = getChartFontSizes();
                 const byCategory = new Map();
                 dayExpenses.forEach(exp => {
-                    const key = Number(exp.category?.id || 0);
+                    const categoryKey = Number(exp.category?.id || 0);
                     const amount = Number(exp.amount || 0);
-                    if (!byCategory.has(key)) {
-                        byCategory.set(key, {
+                    if (!byCategory.has(categoryKey)) {
+                        byCategory.set(categoryKey, {
+                            categoryId: categoryKey,
                             label: exp.category?.name || 'Без категории',
                             color: exp.category?.color || '#95a5a6',
                             total: 0,
+                            bySubcategory: new Map(),
                         });
                     }
-                    byCategory.get(key).total += amount;
+                    const categoryBucket = byCategory.get(categoryKey);
+                    categoryBucket.total += amount;
+
+                    const subcategoryKey = Number(exp.subcategory?.id || 0);
+                    if (!categoryBucket.bySubcategory.has(subcategoryKey)) {
+                        categoryBucket.bySubcategory.set(subcategoryKey, {
+                            subcategoryId: subcategoryKey,
+                            label: exp.subcategory?.name || 'Без подкатегории',
+                            total: 0,
+                        });
+                    }
+                    categoryBucket.bySubcategory.get(subcategoryKey).total += amount;
                 });
 
-                const summary = Array.from(byCategory.values()).sort((a, b) => b.total - a.total);
+                const categorySummary = Array.from(byCategory.values()).sort((a, b) => b.total - a.total);
+                let summary = categorySummary;
+                let title = 'Расходы за день';
+                if (dayChartMode === 'subcategory' && dayChartSelectedCategoryId !== null) {
+                    const selectedCategory = categorySummary.find(item => item.categoryId === dayChartSelectedCategoryId);
+                    if (selectedCategory) {
+                        summary = Array.from(selectedCategory.bySubcategory.values())
+                            .map(sub => ({ ...sub, color: selectedCategory.color }))
+                            .sort((a, b) => b.total - a.total);
+                        title = `Подкатегории: ${selectedCategory.label}`;
+                    } else {
+                        dayChartMode = 'category';
+                        dayChartSelectedCategoryId = null;
+                    }
+                }
+
                 if (dayExpenseChart) dayExpenseChart.destroy();
+                dayExpensesList.innerHTML = '';
+                dayExpenses.forEach(expense => {
+                    const item = document.createElement('li');
+                    item.innerHTML = `
+                        <div class="transaction-main">
+                            <div class="transaction-title">
+                                <strong>${escapeHtml(expense.description || 'Без описания')}</strong>
+                                <span>${escapeHtml(expense.category?.name || 'Без категории')}${expense.subcategory?.name ? ` • ${escapeHtml(expense.subcategory.name)}` : ''}</span>
+                            </div>
+                            <strong>-${Number(expense.amount || 0).toFixed(2)} руб.</strong>
+                        </div>
+                    `;
+                    dayExpensesList.appendChild(item);
+                });
 
                 if (summary.length === 0) {
                     dayChartEmpty.classList.remove('hidden');
@@ -872,14 +997,31 @@
                     options: {
                         responsive: true,
                         plugins: {
-                            legend: { position: 'top' },
-                            title: { display: true, text: 'Расходы за день' },
+                            legend: { position: 'top', labels: { font: { size: chartFont.legend } } },
+                            title: { display: true, text: title, font: { size: chartFont.title } },
+                        },
+                        onClick: (_, elements) => {
+                            if (dayChartMode === 'category' && elements.length > 0) {
+                                dayChartSelectedCategoryId = summary[elements[0].index]?.categoryId ?? null;
+                                dayChartMode = 'subcategory';
+                                renderDayExpenseChart(targetDateIso);
+                                return;
+                            }
+                            if (dayChartMode === 'subcategory' && elements.length === 0) {
+                                dayChartSelectedCategoryId = null;
+                                dayChartMode = 'category';
+                                renderDayExpenseChart(targetDateIso);
+                            }
                         },
                     },
                 });
             };
 
             const openDayChart = (targetDateIso) => {
+                dayChartMode = 'category';
+                dayChartSelectedCategoryId = null;
+                dayExpensesList.classList.add('hidden');
+                toggleDayExpensesBtn.textContent = 'Показать траты за день';
                 renderDayExpenseChart(targetDateIso);
                 calendarDayChartModal.style.display = 'block';
             };
@@ -893,6 +1035,10 @@
 
             dayChartPrevBtn.addEventListener('click', () => shiftDayChartDate(-1));
             dayChartNextBtn.addEventListener('click', () => shiftDayChartDate(1));
+            toggleDayExpensesBtn.addEventListener('click', () => {
+                const isHidden = dayExpensesList.classList.toggle('hidden');
+                toggleDayExpensesBtn.textContent = isHidden ? 'Показать траты за день' : 'Скрыть траты за день';
+            });
 
             document.getElementById('calendar-prev-btn')?.addEventListener('click', () => {
                 calendarMonth--;
@@ -980,10 +1126,13 @@
                 const result = classifyEntry(text);
                 setQaType(result.type);
                 const cat = result.categoryKeyword ? findCategoryByKeyword(result.categoryKeyword) : null;
+                const fallbackCat = findOtherCategory();
                 if (result.type === 'income') {
                     qaDetectedHint.textContent = '💰 Определено как доход';
                 } else if (cat) {
                     qaDetectedHint.textContent = `🛒 Расход → категория «${cat.name}»`;
+                } else if (fallbackCat) {
+                    qaDetectedHint.textContent = `🧾 Расход → категория «${fallbackCat.name}»`;
                 } else {
                     qaDetectedHint.textContent = '🧾 Расход (категория не определена)';
                 }
@@ -1009,8 +1158,9 @@
                         }
                     } else {
                         const cat = result.categoryKeyword ? findCategoryByKeyword(result.categoryKeyword) : null;
+                        const fallbackCat = findOtherCategory();
                         const firstCat = categoryById.values().next().value;
-                        const categoryId = cat?.id || firstCat?.id;
+                        const categoryId = cat?.id || fallbackCat?.id || firstCat?.id;
                         if (!categoryId) { qaErrorDiv.textContent = 'Нет категорий. Создайте хотя бы одну.'; return; }
                         const res = await apiFetch(`${API_URL}/expenses`, {
                             method: 'POST',
@@ -1102,6 +1252,7 @@
             const renderExpenseChart = (summaryData, mode, titleText) => {
                 if (expenseChart) expenseChart.destroy();
                 selectedChartMode = mode;
+                const chartFont = getChartFontSizes();
                 const labels = summaryData.map(item => mode === 'category' ? item.categoryName : item.subcategoryName);
                 const data = summaryData.map(item => item.totalAmount);
                 const colors = mode === 'category'
@@ -1117,8 +1268,8 @@
                     options: {
                         responsive: true,
                         plugins: {
-                            legend: { position: 'top' },
-                            title: { display: true, text: titleText }
+                            legend: { position: 'top', labels: { font: { size: chartFont.legend } } },
+                            title: { display: true, text: titleText, font: { size: chartFont.title } }
                         },
                         onClick: async (_, elements) => {
                             if (mode === 'category' && elements.length > 0) {
@@ -1148,7 +1299,7 @@
                             const centerX = (left + right) / 2;
                             const centerY = (top + bottom) / 2;
                             ctx.save();
-                            ctx.font = '600 14px Arial';
+                            ctx.font = `600 ${chartFont.center}px Arial`;
                             ctx.fillStyle = '#666';
                             ctx.textAlign = 'center';
                             ctx.textBaseline = 'middle';

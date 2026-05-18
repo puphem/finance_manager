@@ -126,10 +126,11 @@
                 <h2>Все траты</h2>
                 <div class="expenses-page-actions">
                     <button id="back-to-dashboard-btn" type="button">← Назад</button>
+                    <button id="toggle-expenses-filters-btn" type="button">Показать фильтры</button>
                 </div>
             </div>
 
-            <div class="expenses-filters">
+            <div id="expenses-filters-panel" class="expenses-filters hidden">
                 <div class="filter-group">
                     <label>Период</label>
                     <div id="expenses-filter-presets" class="preset-buttons">
@@ -137,7 +138,6 @@
                         <button type="button" data-preset="yesterday">Вчера</button>
                         <button type="button" data-preset="week">7 дней</button>
                         <button type="button" data-preset="month" class="active">30 дней</button>
-                        <button type="button" data-preset="custom">Свой</button>
                         <button type="button" data-preset="all">Все</button>
                     </div>
                 </div>
@@ -192,6 +192,13 @@
                 </div>
                 <div class="form-group">
                     <button type="button" id="save-receipt-api-token-btn">Сохранить токен</button>
+                </div>
+                <div class="form-group settings-backup">
+                    <button type="button" id="export-backup-btn">Экспорт backup</button>
+                </div>
+                <div class="form-group settings-backup">
+                    <button type="button" id="import-backup-btn">Импорт backup</button>
+                    <input type="file" id="import-backup-file-input" accept="application/json" class="hidden">
                 </div>
             </div>
         </section>
@@ -361,6 +368,8 @@
         <section id="day-chart-section">
             <canvas id="day-expense-chart"></canvas>
         </section>
+        <button type="button" id="toggle-day-expenses-btn">Показать траты за день</button>
+        <ul id="day-expenses-list" class="hidden"></ul>
         <div id="day-chart-empty" class="field-hint hidden">За этот день нет расходов.</div>
     </div>
 </div>

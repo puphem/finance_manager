@@ -21,6 +21,7 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long>, JpaSpec
     List<Expense> findByUserAndDateBetweenOrderByDateDesc(User user, LocalDate start, LocalDate end);
     Optional<Expense> findByIdAndUser(Long id, User user);
     boolean existsByIdAndUser(Long id, User user);
+    void deleteAllByUser(User user);
 
     @Query("SELECT COALESCE(SUM(e.amount), 0) FROM Expense e WHERE e.user = :user AND e.date >= :startDate AND e.date <= :endDate")
     BigDecimal sumAmountByUserAndDateBetween(@Param("user") User user, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);

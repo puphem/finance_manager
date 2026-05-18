@@ -18,6 +18,7 @@ public interface IncomeRepository extends JpaRepository<Income, Long> {
     List<Income> findByUserAndDateBetweenOrderByDateDesc(User user, LocalDate start, LocalDate end);
     Optional<Income> findByIdAndUser(Long id, User user);
     boolean existsByIdAndUser(Long id, User user);
+    void deleteAllByUser(User user);
 
     @Query("SELECT COALESCE(SUM(i.amount), 0) FROM Income i WHERE i.user = :user AND i.date >= :startDate AND i.date <= :endDate")
     BigDecimal sumAmountByUserAndDateBetween(@Param("user") User user, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);

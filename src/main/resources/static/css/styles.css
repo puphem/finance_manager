@@ -53,6 +53,7 @@ body {
     background-color: var(--bg-color);
     color: var(--text-color);
     padding: 12px;
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
     font-size: calc(15px * var(--font-scale));
 }
 
@@ -290,6 +291,12 @@ button:hover {
     flex-direction: column;
     gap: 8px;
     margin-bottom: 8px;
+}
+
+.expenses-page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 #chart-filter-buttons,
@@ -536,7 +543,7 @@ select {
 
 @media (max-width: 699px) {
     body {
-        padding-bottom: 70px;
+        padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
     }
 
     .app-nav {
@@ -546,15 +553,17 @@ select {
     #bottom-nav {
         display: flex;
         position: fixed;
-        bottom: 0;
+        bottom: env(safe-area-inset-bottom, 0px);
         left: 0;
         right: 0;
-        height: 58px;
+        height: calc(58px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: env(safe-area-inset-bottom, 0px);
         background: var(--surface-color);
         border-top: 1px solid var(--border-color);
         z-index: 100;
         align-items: stretch;
         box-shadow: 0 -2px 8px rgba(0,0,0,0.12);
+        transform: translateZ(0);
     }
 
     .bottom-nav-btn {
@@ -840,6 +849,28 @@ select {
 
 .settings-token {
     grid-column: 1 / -1;
+}
+
+.settings-backup {
+    grid-column: 1 / -1;
+}
+
+#day-expenses-list {
+    margin-top: 10px;
+}
+
+#day-expenses-list li {
+    margin-bottom: 6px;
+}
+
+#calendar-day-chart-modal .modal-content {
+    padding-top: 42px;
+}
+
+#calendar-day-chart-modal .close-button {
+    top: 6px;
+    right: 12px;
+    z-index: 2;
 }
 
 .calendar-legend-item {
