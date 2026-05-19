@@ -2,6 +2,8 @@ package com.example.financemanager.controller;
 
 import com.example.financemanager.dto.CategoryRequestDto;
 import com.example.financemanager.dto.CategoryResponseDto;
+import com.example.financemanager.dto.SubcategoryRequestDto;
+import com.example.financemanager.dto.SubcategoryResponseDto;
 import com.example.financemanager.service.CategoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,12 @@ public class CategoryController {
     public ResponseEntity<CategoryResponseDto> createCategory(@Valid @RequestBody CategoryRequestDto categoryDto) {
         CategoryResponseDto createdCategory = categoryService.createCategory(categoryDto);
         return new ResponseEntity<>(createdCategory, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/subcategories")
+    public ResponseEntity<SubcategoryResponseDto> createSubcategory(@Valid @RequestBody SubcategoryRequestDto subcategoryDto) {
+        SubcategoryResponseDto createdSubcategory = categoryService.createSubcategory(subcategoryDto);
+        return new ResponseEntity<>(createdSubcategory, HttpStatus.CREATED);
     }
 
     @GetMapping

@@ -1,35 +1,318 @@
 package com.example.financemanager.api;
 
 import com.example.financemanager.dto.fns.FnsReceiptResponse;
+import com.example.financemanager.util.ReceiptQrUtils;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Component
+@RequiredArgsConstructor
 public class FnsApiClient {
 
+    // Values up to this threshold are treated as epoch seconds; larger values are epoch milliseconds.
+    // This safely separates typical second-based timestamps from millisecond-based ones.
+    private static final long EPOCH_MILLIS_THRESHOLD = 9_999_999_999L;
+
+    private final WebClient.Builder webClientBuilder;
+
+    @Value("${fns.api.token:}")
+    private String apiToken;
+
+    @Value("${fns.api.base-url:https://proverkacheka.com}")
+    private String apiBaseUrl;
+
     public FnsReceiptResponse getReceiptDetails(String qrCodeData) {
-        System.out.println(">>> ВЫЗВАН ФЕЙКОВЫЙ КЛИЕНТ ФНС. ДАННЫЕ QR: " + qrCodeData);
+        return getReceiptDetails(qrCodeData, null);
+    }
 
-        // Создаем фейковые позиции
-        var item1 = new FnsReceiptResponse.Item("Молоко 'Домик в деревне'", 8990, 1.0, 8990);
-        var item2 = new FnsReceiptResponse.Item("Хлеб 'Бородинский'", 5450, 1.0, 5450);
-        var item3 = new FnsReceiptResponse.Item("Сыр 'Российский' вес", 25000, 0.3, 7500);
+    public FnsReceiptResponse getReceiptDetails(String qrCodeData, String requestToken) {
+        String effectiveToken = (requestToken != null && !requestToken.isBlank()) ? requestToken : apiToken;
+        FnsReceiptResponse apiResponse = tryLoadReceiptFromApi(qrCodeData, effectiveToken);
+        if (isUsable(apiResponse)) {
+            return apiResponse;
+        }
+        return buildFallbackResponseFromQr(qrCodeData);
+    }
 
-        // Создаем сам фейковый чек
-        var receiptJson = new FnsReceiptResponse.ReceiptJson();
-        receiptJson.setUser("Пятерочка");
-        receiptJson.setTotalSum(8990 + 5450 + 7500);
-        receiptJson.setDateTime(LocalDateTime.now().minusDays(1)); // Генерируем LocalDateTime
-        receiptJson.setItems(List.of(item1, item2, item3));
+    private FnsReceiptResponse tryLoadReceiptFromApi(String qrCodeData, String effectiveToken) {
+        if (effectiveToken == null || effectiveToken.isBlank()) {
+            return null;
+        }
 
-        var data = new FnsReceiptResponse.FnsReceiptData();
+        try {
+            Object responseBody = webClientBuilder
+                    .baseUrl(apiBaseUrl)
+                    .build()
+                    .post()
+                    .uri("/api/v1/check/get")
+                    .bodyValue(Map.of(
+                            "token", effectiveToken,
+                            "qrraw", qrCodeData
+                    ))
+                    .retrieve()
+                    .bodyToMono(Object.class)
+                    .block();
+
+            Map<?, ?> responseMap = asMap(responseBody);
+            if (responseMap == null && responseBody instanceof List<?> list && !list.isEmpty()) {
+                responseMap = asMap(list.get(0));
+            }
+            if (responseMap == null) {
+                return null;
+            }
+            return mapToReceiptResponse(responseMap);
+        } catch (WebClientResponseException ex) {
+            return null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private boolean isUsable(FnsReceiptResponse response) {
+        return response != null
+                && response.getData() != null
+                && response.getData().getJson() != null
+                && response.getData().getJson().getItems() != null
+                && !response.getData().getJson().getItems().isEmpty();
+    }
+
+    private FnsReceiptResponse mapToReceiptResponse(Map<?, ?> responseMap) {
+        if (responseMap == null || responseMap.isEmpty()) {
+            return null;
+        }
+
+        Map<?, ?> receiptJsonMap = extractReceiptJsonMap(responseMap);
+        if (receiptJsonMap == null || receiptJsonMap.isEmpty()) {
+            return null;
+        }
+
+        FnsReceiptResponse.ReceiptJson receiptJson = new FnsReceiptResponse.ReceiptJson();
+        receiptJson.setUser(asString(receiptJsonMap.get("user"), "Неизвестный магазин"));
+        receiptJson.setTotalSum(asLong(receiptJsonMap.get("totalSum"), 0L));
+        receiptJson.setDateTime(parseDateTimeValue(receiptJsonMap.get("dateTime"), LocalDateTime.now()));
+        receiptJson.setItems(extractItems(receiptJsonMap.get("items")));
+
+        FnsReceiptResponse.FnsReceiptData data = new FnsReceiptResponse.FnsReceiptData();
         data.setJson(receiptJson);
 
-        var response = new FnsReceiptResponse();
-        response.setCode(1); // Успешный код
+        FnsReceiptResponse response = new FnsReceiptResponse();
+        response.setCode((int) asLong(responseMap.get("code"), 1L));
         response.setData(data);
-
         return response;
+    }
+
+    private Map<?, ?> extractReceiptJsonMap(Map<?, ?> responseMap) {
+        Map<?, ?> dataMap = asMap(responseMap.get("data"));
+        if (dataMap != null) {
+            Map<?, ?> json = asMap(dataMap.get("json"));
+            if (json != null && !json.isEmpty()) {
+                return json;
+            }
+
+            Map<?, ?> receipt = asMap(dataMap.get("receipt"));
+            if (receipt != null && !receipt.isEmpty()) {
+                return receipt;
+            }
+
+            Map<?, ?> ticket = asMap(dataMap.get("ticket"));
+            Map<?, ?> document = ticket == null ? null : asMap(ticket.get("document"));
+            Map<?, ?> nestedReceipt = document == null ? null : asMap(document.get("receipt"));
+            if (nestedReceipt != null && !nestedReceipt.isEmpty()) {
+                return nestedReceipt;
+            }
+        }
+
+        Map<?, ?> topLevelJson = asMap(responseMap.get("json"));
+        if (topLevelJson != null && !topLevelJson.isEmpty()) {
+            return topLevelJson;
+        }
+
+        Map<?, ?> topLevelReceipt = asMap(responseMap.get("receipt"));
+        if (topLevelReceipt != null && !topLevelReceipt.isEmpty()) {
+            return topLevelReceipt;
+        }
+
+        Map<?, ?> ticket = asMap(responseMap.get("ticket"));
+        Map<?, ?> document = ticket == null ? null : asMap(ticket.get("document"));
+        Map<?, ?> nestedReceipt = document == null ? null : asMap(document.get("receipt"));
+        if (nestedReceipt != null && !nestedReceipt.isEmpty()) {
+            return nestedReceipt;
+        }
+
+        return null;
+    }
+
+    private List<FnsReceiptResponse.Item> extractItems(Object itemsObj) {
+        if (!(itemsObj instanceof List<?> rawItems)) {
+            return List.of();
+        }
+
+        List<FnsReceiptResponse.Item> items = new ArrayList<>();
+        for (Object itemObj : rawItems) {
+            Map<?, ?> itemMap = asMap(itemObj);
+            if (itemMap == null || itemMap.isEmpty()) {
+                continue;
+            }
+
+            String name = asString(itemMap.get("name"), "Позиция из чека");
+            long sum = asLong(itemMap.get("sum"), 0L);
+            long price = asLong(itemMap.get("price"), sum);
+            double quantity = asDouble(itemMap.get("quantity"), 1.0);
+            items.add(new FnsReceiptResponse.Item(name, price, quantity, sum));
+        }
+        return items;
+    }
+
+    private FnsReceiptResponse buildFallbackResponseFromQr(String qrCodeData) {
+        Map<String, String> params = ReceiptQrUtils.parseQrParams(qrCodeData);
+        long totalSumInCents = parseTotalSumToCents(params.get("s"));
+        if (totalSumInCents <= 0) {
+            throw new IllegalStateException("Не удалось определить сумму чека из QR-кода.");
+        }
+        LocalDateTime dateTime = parseReceiptDate(params.get("t"));
+        String documentNumber = params.getOrDefault("i", "неизвестен");
+
+        FnsReceiptResponse.Item item = new FnsReceiptResponse.Item(
+                "Товар из чека №" + documentNumber,
+                totalSumInCents,
+                1.0,
+                totalSumInCents
+        );
+
+        FnsReceiptResponse.ReceiptJson receiptJson = new FnsReceiptResponse.ReceiptJson();
+        receiptJson.setUser("Чек без детализации");
+        receiptJson.setTotalSum(totalSumInCents);
+        receiptJson.setDateTime(dateTime);
+        receiptJson.setItems(List.of(item));
+
+        FnsReceiptResponse.FnsReceiptData data = new FnsReceiptResponse.FnsReceiptData();
+        data.setJson(receiptJson);
+
+        FnsReceiptResponse response = new FnsReceiptResponse();
+        response.setCode(1);
+        response.setData(data);
+        return response;
+    }
+
+    private long parseTotalSumToCents(String rawSum) {
+        if (rawSum == null || rawSum.isBlank()) {
+            return 0L;
+        }
+        try {
+            BigDecimal rubles = new BigDecimal(rawSum.replace(",", "."));
+            return rubles.multiply(BigDecimal.valueOf(100))
+                    .setScale(0, RoundingMode.HALF_UP)
+                    .longValue();
+        } catch (NumberFormatException ex) {
+            return 0L;
+        }
+    }
+
+    private LocalDateTime parseReceiptDate(String rawDate) {
+        if (rawDate == null || rawDate.isBlank()) {
+            return LocalDateTime.now();
+        }
+
+        List<DateTimeFormatter> formatters = List.of(
+                DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss"),
+                DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmm")
+        );
+        for (DateTimeFormatter formatter : formatters) {
+            try {
+                return LocalDateTime.parse(rawDate, formatter);
+            } catch (DateTimeParseException ignored) {
+            }
+        }
+        return LocalDateTime.now();
+    }
+
+    private LocalDateTime parseDateTimeValue(Object value, LocalDateTime defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+
+        if (value instanceof Number number) {
+            long timestamp = number.longValue();
+            Instant instant = timestamp > EPOCH_MILLIS_THRESHOLD
+                    ? Instant.ofEpochMilli(timestamp)
+                    : Instant.ofEpochSecond(timestamp);
+            return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
+        }
+
+        String text = String.valueOf(value);
+        if (text.isBlank()) {
+            return defaultValue;
+        }
+
+        try {
+            return LocalDateTime.parse(text);
+        } catch (DateTimeParseException ignored) {
+        }
+
+        try {
+            return LocalDateTime.parse(text, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        } catch (DateTimeParseException ignored) {
+        }
+
+        try {
+            return LocalDateTime.ofInstant(Instant.parse(text), ZoneId.systemDefault());
+        } catch (DateTimeParseException ignored) {
+        }
+
+        return defaultValue;
+    }
+
+    private Map<?, ?> asMap(Object value) {
+        return value instanceof Map<?, ?> map ? map : null;
+    }
+
+    private String asString(Object value, String defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        String text = String.valueOf(value);
+        return text.isBlank() ? defaultValue : text;
+    }
+
+    private long asLong(Object value, long defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
+    }
+
+    private double asDouble(Object value, double defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return Double.parseDouble(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
     }
 }

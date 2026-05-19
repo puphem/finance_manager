@@ -3,6 +3,7 @@ package com.example.financemanager.controller;
 import com.example.financemanager.dto.CategoryExpenseDto;
 import com.example.financemanager.dto.ExpenseRequestDto;
 import com.example.financemanager.dto.ExpenseResponseDto;
+import com.example.financemanager.dto.SubcategoryExpenseDto;
 import com.example.financemanager.service.ExpenseService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,11 @@ public class ExpenseController {
         return ResponseEntity.ok(expenseService.getAllExpenses(period));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ExpenseResponseDto> getExpenseById(@PathVariable Long id) {
+        return ResponseEntity.ok(expenseService.getExpenseById(id));
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<ExpenseResponseDto> updateExpense(@PathVariable Long id, @Valid @RequestBody ExpenseRequestDto expenseDto) {
         return ResponseEntity.ok(expenseService.updateExpense(id, expenseDto));
@@ -45,5 +51,13 @@ public class ExpenseController {
     @GetMapping("/summary-by-category")
     public ResponseEntity<List<CategoryExpenseDto>> getSummaryByCategory(@RequestParam(defaultValue = "month") String period) {
         return ResponseEntity.ok(expenseService.getCategoryExpenseSummary(period));
+    }
+
+    @GetMapping("/summary-by-subcategory")
+    public ResponseEntity<List<SubcategoryExpenseDto>> getSummaryBySubcategory(
+            @RequestParam Long categoryId,
+            @RequestParam(defaultValue = "month") String period
+    ) {
+        return ResponseEntity.ok(expenseService.getSubcategoryExpenseSummary(categoryId, period));
     }
 }

@@ -30,8 +30,15 @@ public class Receipt {
     @Column(nullable = false)
     private BigDecimal totalAmount;
 
+    @Column(nullable = false, length = 255)
+    private String receiptKey;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     @OneToMany(mappedBy = "receipt", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Expense> expenses = new ArrayList<>(); // Инициализируем список
+    private List<Expense> expenses = new ArrayList<>();
 
     public void addExpense(Expense expense) {
         this.expenses.add(expense);
