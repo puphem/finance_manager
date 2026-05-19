@@ -11,6 +11,7 @@
     const THEME_KEY_PREFIX = 'finance_theme';
     const FONT_SIZE_KEY_PREFIX = 'finance_font_size';
     const RECURRING_RULES_KEY_PREFIX = 'finance_recurring_rules';
+    const DEFAULT_EXPENSE_CATEGORY_NAME = 'продукты';
     const RECENT_EXPENSE_LIMIT = 7;
     const EXPENSES_PAGE_STEP = 20;
 
@@ -18,9 +19,13 @@
     const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
     const getStoredUsername = () => localStorage.getItem(USERNAME_KEY);
     const setStoredUsername = (username) => localStorage.setItem(USERNAME_KEY, username);
+    const getStorageScope = () => {
+        const username = (getStoredUsername() || '').trim();
+        if (username) return `user:${username}`;
+        return 'anonymous';
+    };
     const getScopedStorageKey = (prefix) => {
-        const username = (getStoredUsername() || '').trim().toLowerCase();
-        return username ? `${prefix}:${username}` : prefix;
+        return `${prefix}:${getStorageScope()}`;
     };
 
     const logout = () => {
@@ -311,6 +316,7 @@
             const dayChartDateLabel = getElement('day-chart-date-label');
             const dayChartPrevBtn = getElement('day-chart-prev-btn');
             const dayChartNextBtn = getElement('day-chart-next-btn');
+            const dayChartBackBtn = getElement('day-chart-back-btn');
             const dayExpenseChartCanvas = getElement('day-expense-chart');
             const dayChartEmpty = getElement('day-chart-empty');
             const toggleDayExpensesBtn = getElement('toggle-day-expenses-btn');
@@ -501,7 +507,10 @@
             const selectDefaultExpenseCategory = () => {
                 const categories = Array.from(categoryById.values());
                 if (categories.length === 0) return;
-                const preferred = categories.find(category => (category.name || '').toLowerCase().includes('продукт'));
+                const preferred = categories.find(category => {
+                    const normalized = (category.name || '').trim().toLowerCase();
+                    return normalized === DEFAULT_EXPENSE_CATEGORY_NAME || normalized.startsWith(`${DEFAULT_EXPENSE_CATEGORY_NAME} `);
+                });
                 const fallback = preferred || categories[0];
                 expenseCategorySelect.value = String(fallback.id);
                 populateSubcategories();
@@ -608,6 +617,7 @@
             };
 
             const getSubcategoryTint = (categoryColor, index = 0) => {
+                // Alternating dark/light shifts to keep neighbor slices visually distinct.
                 const shifts = [0, -72, 72, -44, 44, -22, 22, -86, 86, -58, 58];
                 const shift = shifts[index % shifts.length];
                 return adjustHexColor(categoryColor || '#95a5a6', shift);
@@ -762,7 +772,6 @@
                 return renderExpenseRow(transaction, index);
             };
 
-            const getRecordNameByType = (type) => type === 'income' ? 'доход' : 'трату';
             const getApiPathByType = (type) => type === 'income' ? 'incomes' : 'expenses';
 
             const openIncomeEditForm = (data) => {
@@ -824,7 +833,7 @@
                         else openExpenseEditForm(data);
                     } else if (dx < -THRESHOLD) {
                         // swipe left → delete
-                        if (confirm(`Удалить ${getRecordNameByType(entryType)}?`)) {
+                        if (confirm(entryType === 'income' ? 'Удалить доход?' : 'Удалить запись о расходе?')) {
                             await apiFetch(`${API_URL}/${getApiPathByType(entryType)}/${entryId}`, { method: 'DELETE' });
                             await updateDashboard();
                         }
@@ -1051,11 +1060,13 @@
                 if (summary.length === 0) {
                     dayChartEmpty.classList.remove('hidden');
                     dayExpenseChartCanvas.classList.add('hidden');
+                    dayChartBackBtn.classList.add('hidden');
                     return;
                 }
 
                 dayChartEmpty.classList.add('hidden');
                 dayExpenseChartCanvas.classList.remove('hidden');
+                dayChartBackBtn.classList.toggle('hidden', dayChartMode !== 'subcategory');
                 dayExpenseChart = new Chart(dayExpenseChartCanvas, {
                     type: 'doughnut',
                     data: {
@@ -1124,6 +1135,12 @@
 
             dayChartPrevBtn.addEventListener('click', () => shiftDayChartDate(-1));
             dayChartNextBtn.addEventListener('click', () => shiftDayChartDate(1));
+            dayChartBackBtn.addEventListener('click', () => {
+                if (dayChartMode !== 'subcategory' || !dayChartDate) return;
+                dayChartSelectedCategoryId = null;
+                dayChartMode = 'category';
+                renderDayExpenseChart(dayChartDate);
+            });
             toggleDayExpensesBtn.addEventListener('click', () => {
                 const isHidden = dayExpensesList.classList.toggle('hidden');
                 toggleDayExpensesBtn.textContent = isHidden ? 'Показать траты за день' : 'Скрыть траты за день';
@@ -1310,7 +1327,8 @@
                     if (startDate && expenseDate < startDate) return false;
                     if (endDate && expenseDate > endDate) return false;
                     if (selectedCategory === '__income__' && expense.entryType !== 'income') return false;
-                    if (selectedCategoryId && Number(expense.category?.id) !== selectedCategoryId) return false;
+                    if (selectedCategoryId && expense.entryType === 'expense' && Number(expense.category?.id) !== selectedCategoryId) return false;
+                    if (selectedCategoryId && expense.entryType === 'income') return false;
 
                     if (query) {
                         const haystack = [
@@ -1332,16 +1350,17 @@
                 const response = await apiFetch(`${API_URL}/expenses?period=all`);
                 if (!response.ok) throw new Error('Не удалось загрузить траты');
                 const expenses = await response.json();
-                allExpensesCache = expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+                allExpensesCache = expenses
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .map(expense => ({ ...expense, entryType: 'expense' }));
             };
 
             const refreshAllTransactions = async () => {
                 const response = await apiFetch(`${API_URL}/incomes?period=all`);
                 if (!response.ok) throw new Error('Не удалось загрузить доходы');
                 const incomes = await response.json();
-                const expenses = allExpensesCache.map(expense => ({ ...expense, entryType: 'expense' }));
                 const incomeEntries = incomes.map(income => ({ ...income, entryType: 'income' }));
-                allTransactionsCache = [...expenses, ...incomeEntries].sort((a, b) => {
+                allTransactionsCache = [...allExpensesCache, ...incomeEntries].sort((a, b) => {
                     const dateDiff = new Date(b.date) - new Date(a.date);
                     if (dateDiff !== 0) return dateDiff;
                     return Number(b.id || 0) - Number(a.id || 0);
@@ -1775,7 +1794,9 @@
                 const endpoint = `${API_URL}/${getApiPathByType(type)}/${id}`;
 
                 if (target.classList.contains('delete-btn')) {
-                    if (!confirm(`Вы уверены, что хотите удалить ${getRecordNameByType(type)}?`)) return;
+                    if (!confirm(type === 'income'
+                        ? 'Вы уверены, что хотите удалить этот доход?'
+                        : 'Вы уверены, что хотите удалить эту запись о расходе?')) return;
                     await apiFetch(endpoint, { method: 'DELETE' });
                     await updateDashboard();
                 }

@@ -108,7 +108,7 @@
                         </div>
                     </div>
                     <section id="chart-section">
-                        <canvas id="expense-chart"></canvas>
+                        <canvas id="expense-chart" role="img" aria-label="Диаграмма расходов по категориям"></canvas>
                     </section>
                 </div>
                 <aside class="dashboard-recent-panel">
@@ -366,8 +366,9 @@
             <button id="day-chart-next-btn" type="button">→</button>
         </div>
         <section id="day-chart-section">
-            <canvas id="day-expense-chart"></canvas>
+            <canvas id="day-expense-chart" role="img" aria-label="Диаграмма расходов за выбранный день"></canvas>
         </section>
+        <button type="button" id="day-chart-back-btn" class="hidden">← Назад к категориям</button>
         <button type="button" id="toggle-day-expenses-btn">Показать траты за день</button>
         <ul id="day-expenses-list" class="hidden"></ul>
         <div id="day-chart-empty" class="field-hint hidden">За этот день нет расходов.</div>
