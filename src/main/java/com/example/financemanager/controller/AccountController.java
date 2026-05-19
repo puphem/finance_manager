@@ -29,4 +29,3 @@ public class AccountController {
         return ResponseEntity.ok(authService.updatePassword(request));
     }
 }
-

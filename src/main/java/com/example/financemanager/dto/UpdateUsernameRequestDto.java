@@ -14,4 +14,3 @@ public class UpdateUsernameRequestDto {
     @NotBlank(message = "Текущий пароль не может быть пустым")
     private String currentPassword;
 }
-

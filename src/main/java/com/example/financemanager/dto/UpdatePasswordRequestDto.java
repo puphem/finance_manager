@@ -14,4 +14,3 @@ public class UpdatePasswordRequestDto {
     @Size(min = 6, message = "Новый пароль должен содержать не менее 6 символов")
     private String newPassword;
 }
-

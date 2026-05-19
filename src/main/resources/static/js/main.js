@@ -14,7 +14,7 @@
     const DEFAULT_EXPENSE_CATEGORY_NAME = 'продукты';
     const RECENT_EXPENSE_LIMIT = 7;
     const EXPENSES_PAGE_STEP = 20;
-    const AUTO_SYNC_INTERVAL_MS = 15000;
+    const AUTO_SYNC_INTERVAL_MS = 30000;
 
     const getToken = () => localStorage.getItem(TOKEN_KEY);
     const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
@@ -735,7 +735,8 @@
             };
 
             const getSubcategoryTint = (categoryColor, index = 0) => {
-                // Alternating dark/light shifts to keep neighbor slices visually distinct.
+                // Shift pattern intentionally alternates strong dark and light offsets,
+                // then medium offsets, so adjacent generated colors differ more clearly.
                 const shifts = [0, -72, 72, -44, 44, -22, 22, -86, 86, -58, 58];
                 const shift = shifts[index % shifts.length];
                 return adjustHexColor(categoryColor || '#95a5a6', shift);
@@ -1448,8 +1449,10 @@
                     if (startDate && expenseDate < startDate) return false;
                     if (endDate && expenseDate > endDate) return false;
                     if (selectedCategory === '__income__' && expense.entryType !== 'income') return false;
-                    if (selectedCategoryId && expense.entryType === 'expense' && Number(expense.category?.id) !== selectedCategoryId) return false;
-                    if (selectedCategoryId && expense.entryType === 'income') return false;
+                    if (selectedCategoryId) {
+                        if (expense.entryType !== 'expense') return false;
+                        if (Number(expense.category?.id) !== selectedCategoryId) return false;
+                    }
 
                     if (query) {
                         const haystack = [
@@ -2004,7 +2007,11 @@
             });
 
             const runAutoSync = async () => {
-                if (autoSyncInProgress || initInProgress || document.hidden || !navigator.onLine || !getToken()) return;
+                if (autoSyncInProgress) return;
+                if (initInProgress) return;
+                if (document.hidden) return;
+                if (!navigator.onLine) return;
+                if (!getToken()) return;
                 autoSyncInProgress = true;
                 try {
                     await updateDashboard();
