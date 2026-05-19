@@ -3,6 +3,8 @@ package com.example.financemanager.service;
 import com.example.financemanager.dto.AuthResponseDto;
 import com.example.financemanager.dto.LoginRequestDto;
 import com.example.financemanager.dto.RegisterRequestDto;
+import com.example.financemanager.dto.UpdatePasswordRequestDto;
+import com.example.financemanager.dto.UpdateUsernameRequestDto;
 import com.example.financemanager.entity.Category;
 import com.example.financemanager.entity.Subcategory;
 import com.example.financemanager.entity.User;
@@ -25,6 +27,7 @@ public class AuthService {
     private final CategoryRepository categoryRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final CurrentUserResolver currentUserResolver;
 
     @Transactional
     public AuthResponseDto register(RegisterRequestDto request) {
@@ -51,6 +54,40 @@ public class AuthService {
             throw new BadCredentialsException("Неверный логин или пароль.");
         }
 
+        String token = jwtService.generateToken(user);
+        return new AuthResponseDto(token, user.getUsername());
+    }
+
+    @Transactional
+    public AuthResponseDto updateUsername(UpdateUsernameRequestDto request) {
+        User user = currentUserResolver.getCurrentUser();
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("Текущий пароль указан неверно.");
+        }
+
+        String nextUsername = request.getNewUsername().trim();
+        if (!nextUsername.equals(user.getUsername()) && userRepository.existsByUsername(nextUsername)) {
+            throw new DuplicateResourceException("Пользователь с логином '" + nextUsername + "' уже существует.");
+        }
+
+        user.setUsername(nextUsername);
+        userRepository.save(user);
+        String token = jwtService.generateToken(user);
+        return new AuthResponseDto(token, user.getUsername());
+    }
+
+    @Transactional
+    public AuthResponseDto updatePassword(UpdatePasswordRequestDto request) {
+        User user = currentUserResolver.getCurrentUser();
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("Текущий пароль указан неверно.");
+        }
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("Новый пароль должен отличаться от текущего.");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
         String token = jwtService.generateToken(user);
         return new AuthResponseDto(token, user.getUsername());
     }

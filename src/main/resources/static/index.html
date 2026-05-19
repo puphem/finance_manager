@@ -200,7 +200,21 @@
                     <button type="button" id="import-backup-btn">Импорт backup</button>
                     <input type="file" id="import-backup-file-input" accept="application/json" class="hidden">
                 </div>
+                <form id="update-username-form" class="form-group settings-account-form">
+                    <label for="new-username-input">Сменить логин</label>
+                    <input type="text" id="new-username-input" placeholder="Новый логин" minlength="3" maxlength="50" required>
+                    <input type="password" id="username-current-password-input" placeholder="Текущий пароль" required>
+                    <button type="submit">Обновить логин</button>
+                </form>
+                <form id="update-password-form" class="form-group settings-account-form">
+                    <label for="new-password-input">Сменить пароль</label>
+                    <input type="password" id="password-current-input" placeholder="Текущий пароль" required>
+                    <input type="password" id="new-password-input" placeholder="Новый пароль" minlength="6" required>
+                    <input type="password" id="new-password-confirm-input" placeholder="Повторите новый пароль" minlength="6" required>
+                    <button type="submit">Обновить пароль</button>
+                </form>
             </div>
+            <div id="settings-account-message" class="field-hint"></div>
         </section>
 
         <section id="calendar-view" class="app-view hidden">

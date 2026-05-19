@@ -14,18 +14,31 @@
     const DEFAULT_EXPENSE_CATEGORY_NAME = 'продукты';
     const RECENT_EXPENSE_LIMIT = 7;
     const EXPENSES_PAGE_STEP = 20;
+    const AUTO_SYNC_INTERVAL_MS = 15000;
 
     const getToken = () => localStorage.getItem(TOKEN_KEY);
     const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
     const getStoredUsername = () => localStorage.getItem(USERNAME_KEY);
     const setStoredUsername = (username) => localStorage.setItem(USERNAME_KEY, username);
-    const getStorageScope = () => {
-        const username = (getStoredUsername() || '').trim();
-        if (username) return `user:${username}`;
+    const getStorageScope = (username = getStoredUsername()) => {
+        const normalizedUsername = (username || '').trim();
+        if (normalizedUsername) return `user:${normalizedUsername}`;
         return 'anonymous';
     };
-    const getScopedStorageKey = (prefix) => {
-        return `${prefix}:${getStorageScope()}`;
+    const getScopedStorageKey = (prefix, username = getStoredUsername()) => {
+        return `${prefix}:${getStorageScope(username)}`;
+    };
+    const migrateScopedSettings = (previousUsername, nextUsername) => {
+        if (!previousUsername || !nextUsername || previousUsername === nextUsername) return;
+        [THEME_KEY_PREFIX, FONT_SIZE_KEY_PREFIX, RECURRING_RULES_KEY_PREFIX].forEach(prefix => {
+            const oldKey = getScopedStorageKey(prefix, previousUsername);
+            const newKey = getScopedStorageKey(prefix, nextUsername);
+            if (oldKey === newKey) return;
+            const value = localStorage.getItem(oldKey);
+            if (value === null) return;
+            localStorage.setItem(newKey, value);
+            localStorage.removeItem(oldKey);
+        });
     };
 
     const logout = () => {
@@ -148,9 +161,23 @@
                     body: JSON.stringify({ username, password }),
                 });
                 if (response.status === 201) {
-                    const data = await response.json();
-                    setToken(data.token);
-                    setStoredUsername(data.username);
+                    const data = await response.json().catch(() => null);
+                    if (data?.token && data?.username) {
+                        setToken(data.token);
+                        setStoredUsername(data.username);
+                    } else {
+                        const loginResponse = await fetch(`${API_URL}/auth/login`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username, password }),
+                        });
+                        if (!loginResponse.ok) {
+                            throw new Error('Регистрация успешна, но не удалось выполнить автологин.');
+                        }
+                        const loginData = await loginResponse.json();
+                        setToken(loginData.token);
+                        setStoredUsername(loginData.username);
+                    }
                     showApp();
                     main().catch(err => console.error(err));
                 } else {
@@ -264,6 +291,14 @@
             const exportBackupBtn = getElement('export-backup-btn');
             const importBackupBtn = getElement('import-backup-btn');
             const importBackupFileInput = getElement('import-backup-file-input');
+            const updateUsernameForm = getElement('update-username-form');
+            const newUsernameInput = getElement('new-username-input');
+            const usernameCurrentPasswordInput = getElement('username-current-password-input');
+            const updatePasswordForm = getElement('update-password-form');
+            const passwordCurrentInput = getElement('password-current-input');
+            const newPasswordInput = getElement('new-password-input');
+            const newPasswordConfirmInput = getElement('new-password-confirm-input');
+            const settingsAccountMessage = getElement('settings-account-message');
 
             const expenseModal = getElement('expense-modal');
             const expenseForm = getElement('expense-form');
@@ -332,6 +367,7 @@
             darkThemeToggle.checked = initialTheme === 'dark';
             fontSizeSelect.value = initialFontSize;
             receiptApiTokenInput.value = '';
+            newUsernameInput.value = getStoredUsername() || '';
             periodIncomeEl.classList.add('hidden');
 
             darkThemeToggle.addEventListener('change', () => {
@@ -409,7 +445,86 @@
                 }
             });
 
+            const showSettingsMessage = (message, isError = false) => {
+                settingsAccountMessage.textContent = message;
+                settingsAccountMessage.style.color = isError ? 'var(--danger)' : 'var(--success)';
+                setTimeout(() => {
+                    if (settingsAccountMessage.textContent === message) {
+                        settingsAccountMessage.textContent = '';
+                        settingsAccountMessage.style.color = '';
+                    }
+                }, 4000);
+            };
+
+            updateUsernameForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const newUsername = (newUsernameInput.value || '').trim();
+                const currentPassword = (usernameCurrentPasswordInput.value || '').trim();
+                if (!newUsername || !currentPassword) {
+                    showSettingsMessage('Заполните новый логин и текущий пароль.', true);
+                    return;
+                }
+                const previousUsername = getStoredUsername() || '';
+                try {
+                    const response = await apiFetch(`${API_URL}/account/username`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ newUsername, currentPassword }),
+                    });
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        showSettingsMessage(err.message || 'Не удалось обновить логин.', true);
+                        return;
+                    }
+                    const data = await response.json();
+                    migrateScopedSettings(previousUsername, data.username);
+                    setToken(data.token);
+                    setStoredUsername(data.username);
+                    showApp();
+                    newUsernameInput.value = data.username;
+                    usernameCurrentPasswordInput.value = '';
+                    showSettingsMessage('Логин успешно обновлен.');
+                    await updateDashboard();
+                } catch (error) {
+                    showSettingsMessage(error.message || 'Ошибка обновления логина.', true);
+                }
+            });
+
+            updatePasswordForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const currentPassword = (passwordCurrentInput.value || '').trim();
+                const newPassword = (newPasswordInput.value || '').trim();
+                const confirmPassword = (newPasswordConfirmInput.value || '').trim();
+                if (!currentPassword || !newPassword || !confirmPassword) {
+                    showSettingsMessage('Заполните все поля для смены пароля.', true);
+                    return;
+                }
+                if (newPassword !== confirmPassword) {
+                    showSettingsMessage('Новый пароль и подтверждение не совпадают.', true);
+                    return;
+                }
+                try {
+                    const response = await apiFetch(`${API_URL}/account/password`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ currentPassword, newPassword }),
+                    });
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        showSettingsMessage(err.message || 'Не удалось обновить пароль.', true);
+                        return;
+                    }
+                    const data = await response.json();
+                    setToken(data.token);
+                    passwordCurrentInput.value = '';
+                    newPasswordInput.value = '';
+                    newPasswordConfirmInput.value = '';
+                    showSettingsMessage('Пароль успешно обновлен.');
+                } catch (error) {
+                    showSettingsMessage(error.message || 'Ошибка обновления пароля.', true);
+                }
+            });
+
             const setActiveView = (viewId) => {
+                currentViewId = viewId;
                 appViews.forEach(view => {
                     view.classList.toggle('hidden', view.id !== viewId);
                 });
@@ -457,6 +572,9 @@
             let dayChartMode = 'category';
             let dayChartSelectedCategoryId = null;
             let receiptApiTokenValue = '';
+            let currentViewId = 'dashboard-view';
+            let autoSyncTimerId = null;
+            let autoSyncInProgress = false;
 
             const renderPalettes = () => {
                 iconPicker.innerHTML = ICONS.map(icon => `<div class="icon-option" data-icon="${icon}"><i class="${icon}"></i></div>`).join('');
@@ -883,19 +1001,22 @@
                 const startStr = toDateInputValue(firstDay);
                 const endStr = toDateInputValue(lastDay);
 
-                // Fetch expenses for month
-                try {
-                    const response = await apiFetch(`${API_URL}/expenses?period=all`);
-                    if (!response.ok) return;
-                    const all = await response.json();
-                    calendarExpensesCache = all.filter(exp => {
-                        const d = exp.date ? exp.date.slice(0, 10) : '';
-                        return d >= startStr && d <= endStr;
-                    });
-                } catch (e) {
-                    console.error('Calendar fetch error', e);
-                    return;
+                // Use already loaded cache and fallback to fetch if cache is not ready yet
+                let sourceExpenses = Array.isArray(allExpensesCache) ? allExpensesCache : [];
+                if (sourceExpenses.length === 0) {
+                    try {
+                        const response = await apiFetch(`${API_URL}/expenses?period=all`);
+                        if (!response.ok) return;
+                        sourceExpenses = await response.json();
+                    } catch (e) {
+                        console.error('Calendar fetch error', e);
+                        return;
+                    }
                 }
+                calendarExpensesCache = sourceExpenses.filter(exp => {
+                    const d = exp.date ? exp.date.slice(0, 10) : '';
+                    return d >= startStr && d <= endStr;
+                });
 
                 // Aggregate by day
                 const dayMap = {}; // day -> { total, categoryTotals: { id: { total, color, name } } }
@@ -1468,6 +1589,12 @@
 
                     await refreshAllExpenses();
                     await refreshAllTransactions();
+                    if (currentViewId === 'calendar-view') {
+                        await renderCalendarView();
+                    }
+                    if (dayChartDate && calendarDayChartModal.style.display === 'block') {
+                        renderDayExpenseChart(dayChartDate);
+                    }
                 } catch (error) {
                     console.error('Ошибка обновления дашборда:', error);
                     dashboardErrorDiv.textContent = error.message || 'Ошибка загрузки данных. Попробуйте обновить страницу.';
@@ -1876,6 +2003,31 @@
                 updateDashboard().catch(() => {});
             });
 
+            const runAutoSync = async () => {
+                if (autoSyncInProgress || initInProgress || document.hidden || !navigator.onLine || !getToken()) return;
+                autoSyncInProgress = true;
+                try {
+                    await updateDashboard();
+                } catch (_) {
+                    // keep silent for background sync
+                } finally {
+                    autoSyncInProgress = false;
+                }
+            };
+
+            const startAutoSync = () => {
+                if (autoSyncTimerId) clearInterval(autoSyncTimerId);
+                autoSyncTimerId = window.setInterval(() => {
+                    runAutoSync().catch(() => {});
+                }, AUTO_SYNC_INTERVAL_MS);
+            };
+
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    runAutoSync().catch(() => {});
+                }
+            });
+
             renderPalettes();
             updateRecurringUiState('expense');
             updateRecurringUiState('income');
@@ -1887,6 +2039,7 @@
             await processRecurringRules();
             await updateDashboard();
             setActiveView('dashboard-view');
+            startAutoSync();
 
             appInitialized = true;
             console.log('main.js: Инициализация завершена.');

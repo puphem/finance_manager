@@ -459,6 +459,11 @@ select {
     height: 22px;
 }
 
+.settings-account-form {
+    display: grid;
+    gap: 8px;
+}
+
 .subcategory-quick-add {
     display: grid;
     grid-template-columns: 1fr;
