@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#2c3e50">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Мои Финансы">
-    <title>Мои Финансы</title>
+    <meta name="apple-mobile-web-app-title" content="Менеджер финансов">
+    <title>Менеджер финансов</title>
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
@@ -21,7 +21,7 @@
 <!-- =================== СТРАНИЦА АВТОРИЗАЦИИ =================== -->
 <div id="auth-page">
     <div class="auth-card">
-        <h1>💰 Мои Финансы</h1>
+        <h1>Менеджер финансов</h1>
         <div class="auth-tabs">
             <button class="auth-tab active" id="tab-login">Войти</button>
             <button class="auth-tab" id="tab-register">Регистрация</button>
@@ -62,7 +62,7 @@
     <div class="container app-container">
 
         <div class="app-header">
-            <strong>💰 Мои Финансы</strong>
+            <strong>Менеджер финансов</strong>
             <div class="header-actions">
                 <span id="current-username"></span>
                 <button id="logout-btn">Выйти</button>
@@ -71,7 +71,7 @@
 
         <nav class="app-nav">
             <button id="nav-dashboard" class="app-nav-btn active" data-view="dashboard-view">Дашборд</button>
-            <button id="nav-expenses" class="app-nav-btn" data-view="expenses-page-view">Все траты</button>
+            <button id="nav-expenses" class="app-nav-btn" data-view="expenses-page-view">Все записи</button>
             <button id="nav-calendar" class="app-nav-btn" data-view="calendar-view">Календарь</button>
             <button id="nav-settings" class="app-nav-btn" data-view="settings-view">Настройки</button>
         </nav>
@@ -108,12 +108,12 @@
                         </div>
                     </div>
                     <section id="chart-section">
-                        <canvas id="expense-chart"></canvas>
+                        <canvas id="expense-chart" role="img" aria-label="Диаграмма расходов по категориям"></canvas>
                     </section>
                 </div>
                 <aside class="dashboard-recent-panel">
                     <div class="transactions-header">
-                        <h2>Последние траты</h2>
+                        <h2>Последние транзакции</h2>
                         <button id="open-all-expenses-btn" type="button">Открыть все</button>
                     </div>
                     <ul id="recent-expense-list"></ul>
@@ -123,7 +123,7 @@
 
         <section id="expenses-page-view" class="app-view hidden">
             <div class="expenses-page-header">
-                <h2>Все траты</h2>
+                <h2>Все записи</h2>
                 <div class="expenses-page-actions">
                     <button id="back-to-dashboard-btn" type="button">← Назад</button>
                     <button id="toggle-expenses-filters-btn" type="button">Показать фильтры</button>
@@ -200,7 +200,21 @@
                     <button type="button" id="import-backup-btn">Импорт backup</button>
                     <input type="file" id="import-backup-file-input" accept="application/json" class="hidden">
                 </div>
+                <form id="update-username-form" class="form-group settings-account-form">
+                    <label for="new-username-input">Сменить логин</label>
+                    <input type="text" id="new-username-input" placeholder="Новый логин" minlength="3" maxlength="50" required>
+                    <input type="password" id="username-current-password-input" placeholder="Текущий пароль" required>
+                    <button type="submit">Обновить логин</button>
+                </form>
+                <form id="update-password-form" class="form-group settings-account-form">
+                    <label for="new-password-input">Сменить пароль</label>
+                    <input type="password" id="password-current-input" placeholder="Текущий пароль" required>
+                    <input type="password" id="new-password-input" placeholder="Новый пароль" minlength="6" required>
+                    <input type="password" id="new-password-confirm-input" placeholder="Повторите новый пароль" minlength="6" required>
+                    <button type="submit">Обновить пароль</button>
+                </form>
             </div>
+            <div id="settings-account-message" class="field-hint"></div>
         </section>
 
         <section id="calendar-view" class="app-view hidden">
@@ -222,7 +236,7 @@
 <!-- Bottom Navigation (mobile only) -->
 <nav id="bottom-nav">
     <button class="bottom-nav-btn active" data-view="dashboard-view"><i class="fas fa-home"></i><span>Дашборд</span></button>
-    <button class="bottom-nav-btn" data-view="expenses-page-view"><i class="fas fa-list"></i><span>Траты</span></button>
+    <button class="bottom-nav-btn" data-view="expenses-page-view"><i class="fas fa-list"></i><span>Записи</span></button>
     <button id="bottom-nav-plus" title="Быстро добавить"><i class="fas fa-plus"></i></button>
     <button class="bottom-nav-btn" data-view="calendar-view"><i class="fas fa-calendar-alt"></i><span>Календарь</span></button>
     <button class="bottom-nav-btn" data-view="settings-view"><i class="fas fa-cog"></i><span>Настройки</span></button>
@@ -366,8 +380,9 @@
             <button id="day-chart-next-btn" type="button">→</button>
         </div>
         <section id="day-chart-section">
-            <canvas id="day-expense-chart"></canvas>
+            <canvas id="day-expense-chart" role="img" aria-label="Диаграмма расходов за выбранный день"></canvas>
         </section>
+        <button type="button" id="day-chart-back-btn" class="hidden">← Назад к категориям</button>
         <button type="button" id="toggle-day-expenses-btn">Показать траты за день</button>
         <ul id="day-expenses-list" class="hidden"></ul>
         <div id="day-chart-empty" class="field-hint hidden">За этот день нет расходов.</div>

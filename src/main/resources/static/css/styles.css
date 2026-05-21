@@ -459,6 +459,11 @@ select {
     height: 22px;
 }
 
+.settings-account-form {
+    display: grid;
+    gap: 8px;
+}
+
 .subcategory-quick-add {
     display: grid;
     grid-template-columns: 1fr;
@@ -899,7 +904,7 @@ select {
     }
 
     #summary-section {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
     }
 
     .quick-actions {

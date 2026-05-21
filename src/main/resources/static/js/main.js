@@ -8,16 +8,38 @@
 
     const TOKEN_KEY = 'finance_jwt_token';
     const USERNAME_KEY = 'finance_username';
-    const THEME_KEY = 'finance_theme';
-    const FONT_SIZE_KEY = 'finance_font_size';
-    const RECURRING_RULES_KEY = 'finance_recurring_rules';
+    const THEME_KEY_PREFIX = 'finance_theme';
+    const FONT_SIZE_KEY_PREFIX = 'finance_font_size';
+    const RECURRING_RULES_KEY_PREFIX = 'finance_recurring_rules';
+    const DEFAULT_EXPENSE_CATEGORY_NAME = 'продукты';
     const RECENT_EXPENSE_LIMIT = 7;
     const EXPENSES_PAGE_STEP = 20;
+    const AUTO_SYNC_INTERVAL_MS = 30000;
 
     const getToken = () => localStorage.getItem(TOKEN_KEY);
     const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
     const getStoredUsername = () => localStorage.getItem(USERNAME_KEY);
     const setStoredUsername = (username) => localStorage.setItem(USERNAME_KEY, username);
+    const getStorageScope = (username = getStoredUsername()) => {
+        const normalizedUsername = (username || '').trim();
+        if (normalizedUsername) return `user:${normalizedUsername}`;
+        return 'anonymous';
+    };
+    const getScopedStorageKey = (prefix, username = getStoredUsername()) => {
+        return `${prefix}:${getStorageScope(username)}`;
+    };
+    const migrateScopedSettings = (previousUsername, nextUsername) => {
+        if (!previousUsername || !nextUsername || previousUsername === nextUsername) return;
+        [THEME_KEY_PREFIX, FONT_SIZE_KEY_PREFIX, RECURRING_RULES_KEY_PREFIX].forEach(prefix => {
+            const oldKey = getScopedStorageKey(prefix, previousUsername);
+            const newKey = getScopedStorageKey(prefix, nextUsername);
+            if (oldKey === newKey) return;
+            const value = localStorage.getItem(oldKey);
+            if (value === null) return;
+            localStorage.setItem(newKey, value);
+            localStorage.removeItem(oldKey);
+        });
+    };
 
     const logout = () => {
         localStorage.removeItem(TOKEN_KEY);
@@ -40,14 +62,14 @@
     const applyTheme = (theme) => {
         const nextTheme = theme === 'dark' ? 'dark' : 'light';
         document.documentElement.dataset.theme = nextTheme;
-        localStorage.setItem(THEME_KEY, nextTheme);
+        localStorage.setItem(getScopedStorageKey(THEME_KEY_PREFIX), nextTheme);
     };
 
     const applyFontSize = (size) => {
         const allowed = new Set(['small', 'normal', 'large']);
         const nextSize = allowed.has(size) ? size : 'normal';
         document.documentElement.dataset.fontSize = nextSize;
-        localStorage.setItem(FONT_SIZE_KEY, nextSize);
+        localStorage.setItem(getScopedStorageKey(FONT_SIZE_KEY_PREFIX), nextSize);
     };
 
     const getFontScaleValue = () => {
@@ -139,9 +161,23 @@
                     body: JSON.stringify({ username, password }),
                 });
                 if (response.status === 201) {
-                    const data = await response.json();
-                    setToken(data.token);
-                    setStoredUsername(data.username);
+                    const data = await response.json().catch(() => null);
+                    if (data?.token && data?.username) {
+                        setToken(data.token);
+                        setStoredUsername(data.username);
+                    } else {
+                        const loginResponse = await fetch(`${API_URL}/auth/login`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username, password }),
+                        });
+                        if (!loginResponse.ok) {
+                            throw new Error('Регистрация успешна, но не удалось выполнить автологин.');
+                        }
+                        const loginData = await loginResponse.json();
+                        setToken(loginData.token);
+                        setStoredUsername(loginData.username);
+                    }
                     showApp();
                     main().catch(err => console.error(err));
                 } else {
@@ -255,6 +291,14 @@
             const exportBackupBtn = getElement('export-backup-btn');
             const importBackupBtn = getElement('import-backup-btn');
             const importBackupFileInput = getElement('import-backup-file-input');
+            const updateUsernameForm = getElement('update-username-form');
+            const newUsernameInput = getElement('new-username-input');
+            const usernameCurrentPasswordInput = getElement('username-current-password-input');
+            const updatePasswordForm = getElement('update-password-form');
+            const passwordCurrentInput = getElement('password-current-input');
+            const newPasswordInput = getElement('new-password-input');
+            const newPasswordConfirmInput = getElement('new-password-confirm-input');
+            const settingsAccountMessage = getElement('settings-account-message');
 
             const expenseModal = getElement('expense-modal');
             const expenseForm = getElement('expense-form');
@@ -307,6 +351,7 @@
             const dayChartDateLabel = getElement('day-chart-date-label');
             const dayChartPrevBtn = getElement('day-chart-prev-btn');
             const dayChartNextBtn = getElement('day-chart-next-btn');
+            const dayChartBackBtn = getElement('day-chart-back-btn');
             const dayExpenseChartCanvas = getElement('day-expense-chart');
             const dayChartEmpty = getElement('day-chart-empty');
             const toggleDayExpensesBtn = getElement('toggle-day-expenses-btn');
@@ -315,13 +360,15 @@
             const logoutBtn = getElement('logout-btn');
             logoutBtn.addEventListener('click', logout);
 
-            const initialTheme = localStorage.getItem(THEME_KEY) || 'light';
-            const initialFontSize = localStorage.getItem(FONT_SIZE_KEY) || 'normal';
+            const initialTheme = localStorage.getItem(getScopedStorageKey(THEME_KEY_PREFIX)) || 'light';
+            const initialFontSize = localStorage.getItem(getScopedStorageKey(FONT_SIZE_KEY_PREFIX)) || 'normal';
             applyTheme(initialTheme);
             applyFontSize(initialFontSize);
             darkThemeToggle.checked = initialTheme === 'dark';
             fontSizeSelect.value = initialFontSize;
             receiptApiTokenInput.value = '';
+            newUsernameInput.value = getStoredUsername() || '';
+            periodIncomeEl.classList.add('hidden');
 
             darkThemeToggle.addEventListener('change', () => {
                 applyTheme(darkThemeToggle.checked ? 'dark' : 'light');
@@ -398,7 +445,86 @@
                 }
             });
 
+            const showSettingsMessage = (message, isError = false) => {
+                settingsAccountMessage.textContent = message;
+                settingsAccountMessage.style.color = isError ? 'var(--danger)' : 'var(--success)';
+                setTimeout(() => {
+                    if (settingsAccountMessage.textContent === message) {
+                        settingsAccountMessage.textContent = '';
+                        settingsAccountMessage.style.color = '';
+                    }
+                }, 4000);
+            };
+
+            updateUsernameForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const newUsername = (newUsernameInput.value || '').trim();
+                const currentPassword = (usernameCurrentPasswordInput.value || '').trim();
+                if (!newUsername || !currentPassword) {
+                    showSettingsMessage('Заполните новый логин и текущий пароль.', true);
+                    return;
+                }
+                const previousUsername = getStoredUsername() || '';
+                try {
+                    const response = await apiFetch(`${API_URL}/account/username`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ newUsername, currentPassword }),
+                    });
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        showSettingsMessage(err.message || 'Не удалось обновить логин.', true);
+                        return;
+                    }
+                    const data = await response.json();
+                    migrateScopedSettings(previousUsername, data.username);
+                    setToken(data.token);
+                    setStoredUsername(data.username);
+                    showApp();
+                    newUsernameInput.value = data.username;
+                    usernameCurrentPasswordInput.value = '';
+                    showSettingsMessage('Логин успешно обновлен.');
+                    await updateDashboard();
+                } catch (error) {
+                    showSettingsMessage(error.message || 'Ошибка обновления логина.', true);
+                }
+            });
+
+            updatePasswordForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const currentPassword = (passwordCurrentInput.value || '').trim();
+                const newPassword = (newPasswordInput.value || '').trim();
+                const confirmPassword = (newPasswordConfirmInput.value || '').trim();
+                if (!currentPassword || !newPassword || !confirmPassword) {
+                    showSettingsMessage('Заполните все поля для смены пароля.', true);
+                    return;
+                }
+                if (newPassword !== confirmPassword) {
+                    showSettingsMessage('Новый пароль и подтверждение не совпадают.', true);
+                    return;
+                }
+                try {
+                    const response = await apiFetch(`${API_URL}/account/password`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ currentPassword, newPassword }),
+                    });
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        showSettingsMessage(err.message || 'Не удалось обновить пароль.', true);
+                        return;
+                    }
+                    const data = await response.json();
+                    setToken(data.token);
+                    passwordCurrentInput.value = '';
+                    newPasswordInput.value = '';
+                    newPasswordConfirmInput.value = '';
+                    showSettingsMessage('Пароль успешно обновлен.');
+                } catch (error) {
+                    showSettingsMessage(error.message || 'Ошибка обновления пароля.', true);
+                }
+            });
+
             const setActiveView = (viewId) => {
+                currentViewId = viewId;
                 appViews.forEach(view => {
                     view.classList.toggle('hidden', view.id !== viewId);
                 });
@@ -432,6 +558,7 @@
             let categoryById = new Map();
             let categoryNameById = new Map();
             let allExpensesCache = [];
+            let allTransactionsCache = [];
             let filteredExpensesPage = [];
             let expensesVisibleCount = EXPENSES_PAGE_STEP;
             let expenseChart = null;
@@ -445,6 +572,9 @@
             let dayChartMode = 'category';
             let dayChartSelectedCategoryId = null;
             let receiptApiTokenValue = '';
+            let currentViewId = 'dashboard-view';
+            let autoSyncTimerId = null;
+            let autoSyncInProgress = false;
 
             const renderPalettes = () => {
                 iconPicker.innerHTML = ICONS.map(icon => `<div class="icon-option" data-icon="${icon}"><i class="${icon}"></i></div>`).join('');
@@ -492,6 +622,18 @@
                 expenseSubcategorySelect.value = selectedSubcategoryId ? String(selectedSubcategoryId) : '';
             };
 
+            const selectDefaultExpenseCategory = () => {
+                const categories = Array.from(categoryById.values());
+                if (categories.length === 0) return;
+                const preferred = categories.find(category => {
+                    const normalized = (category.name || '').trim().toLowerCase();
+                    return normalized === DEFAULT_EXPENSE_CATEGORY_NAME || normalized.startsWith(`${DEFAULT_EXPENSE_CATEGORY_NAME} `);
+                });
+                const fallback = preferred || categories[0];
+                expenseCategorySelect.value = String(fallback.id);
+                populateSubcategories();
+            };
+
             const populateExpenseCategoryFilter = () => {
                 const currentValue = expensesFilterCategory.value;
                 expensesFilterCategory.innerHTML = '';
@@ -499,6 +641,10 @@
                 allOption.value = '';
                 allOption.textContent = 'Все категории';
                 expensesFilterCategory.appendChild(allOption);
+                const incomeOption = document.createElement('option');
+                incomeOption.value = '__income__';
+                incomeOption.textContent = 'Доходы';
+                expensesFilterCategory.appendChild(incomeOption);
 
                 Array.from(categoryById.values()).forEach(category => {
                     const option = document.createElement('option');
@@ -525,8 +671,12 @@
                     option.textContent = category.name;
                     expenseCategorySelect.appendChild(option);
                 });
-                if (currentCategoryValue) expenseCategorySelect.value = currentCategoryValue;
-                populateSubcategories();
+                if (currentCategoryValue && categoryById.has(Number(currentCategoryValue))) {
+                    expenseCategorySelect.value = currentCategoryValue;
+                    populateSubcategories();
+                } else {
+                    selectDefaultExpenseCategory();
+                }
                 populateExpenseCategoryFilter();
             };
 
@@ -585,7 +735,9 @@
             };
 
             const getSubcategoryTint = (categoryColor, index = 0) => {
-                const shifts = [-30, -12, 10, 24, 36, -22, 18, 30];
+                // Shift pattern intentionally alternates strong dark and light offsets,
+                // then medium offsets, so adjacent generated colors differ more clearly.
+                const shifts = [0, -72, 72, -44, 44, -22, 22, -86, 86, -58, 58];
                 const shift = shifts[index % shifts.length];
                 return adjustHexColor(categoryColor || '#95a5a6', shift);
             };
@@ -623,7 +775,7 @@
 
             const getStoredRecurringRules = () => {
                 try {
-                    const parsed = JSON.parse(localStorage.getItem(RECURRING_RULES_KEY) || '[]');
+                    const parsed = JSON.parse(localStorage.getItem(getScopedStorageKey(RECURRING_RULES_KEY_PREFIX)) || '[]');
                     return Array.isArray(parsed) ? parsed : [];
                 } catch (_) {
                     return [];
@@ -631,7 +783,7 @@
             };
 
             const saveRecurringRules = (rules) => {
-                localStorage.setItem(RECURRING_RULES_KEY, JSON.stringify(rules));
+                localStorage.setItem(getScopedStorageKey(RECURRING_RULES_KEY_PREFIX), JSON.stringify(rules));
             };
 
             const addRecurringRule = (rule) => {
@@ -704,12 +856,60 @@
                         <button class="edit-btn" data-id="${expense.id}" data-type="expense">✏️</button>
                         <button class="delete-btn" data-id="${expense.id}" data-type="expense">🗑️</button>
                     </div>`;
-                attachSwipeHandlers(item, expense.id);
+                attachSwipeHandlers(item, expense.id, 'expense');
                 return item;
             };
 
+            const renderIncomeRow = (income) => {
+                const item = document.createElement('li');
+                item.classList.add('swipeable');
+                const date = new Date(income.date).toLocaleDateString('ru-RU');
+                const amountText = `+${Number(income.amount || 0).toFixed(2)} руб.`;
+                const safeDescription = escapeHtml(income.description || 'Доход');
+
+                item.innerHTML = `
+                    <div class="swipe-action-bg swipe-action-right">✏️</div>
+                    <div class="swipe-action-bg swipe-action-left">🗑️</div>
+                    <div style="font-size:1.35em; color:var(--success);"><i class="fas fa-arrow-trend-up"></i></div>
+                    <div class="transaction-main">
+                        <div class="transaction-title">
+                            <span><strong style="color: var(--success);">${amountText}</strong> — ${safeDescription}</span>
+                        </div>
+                        <small class="transaction-date">${date}</small>
+                    </div>
+                    <div class="transaction-actions">
+                        <button class="repeat-btn" data-id="${income.id}" data-type="income" title="Повторить">🔄</button>
+                        <button class="edit-btn" data-id="${income.id}" data-type="income">✏️</button>
+                        <button class="delete-btn" data-id="${income.id}" data-type="income">🗑️</button>
+                    </div>`;
+                attachSwipeHandlers(item, income.id, 'income');
+                return item;
+            };
+
+            const renderTransactionRow = (transaction, index) => {
+                if (transaction.entryType === 'income') return renderIncomeRow(transaction);
+                return renderExpenseRow(transaction, index);
+            };
+
+            const getApiPathByType = (type) => type === 'income' ? 'incomes' : 'expenses';
+
+            const openIncomeEditForm = (data) => {
+                incomeModalTitle.textContent = 'Редактировать доход';
+                incomeIdInput.value = data.id;
+                incomeAmountInput.value = data.amount;
+                incomeDateInput.value = data.date;
+                incomeDescriptionInput.value = data.description || '';
+                incomeRecurringEnabled.checked = false;
+                incomeRecurringPeriod.value = '1';
+                incomeRecurringCustomDays.value = '';
+                updateRecurringUiState('income');
+                incomeErrorDiv.textContent = '';
+                incomeModal.style.display = 'block';
+                incomeDescriptionInput.focus();
+            };
+
             /* ======= SWIPE ACTIONS ======= */
-            const attachSwipeHandlers = (item, expenseId) => {
+            const attachSwipeHandlers = (item, entryId, entryType) => {
                 let startX = 0;
                 let currentX = 0;
                 let swiping = false;
@@ -745,14 +945,15 @@
                     reset();
                     if (dx > THRESHOLD) {
                         // swipe right → edit
-                        const response = await apiFetch(`${API_URL}/expenses/${expenseId}`);
+                        const response = await apiFetch(`${API_URL}/${getApiPathByType(entryType)}/${entryId}`);
                         if (!response.ok) return;
                         const data = await response.json();
-                        openExpenseEditForm(data);
+                        if (entryType === 'income') openIncomeEditForm(data);
+                        else openExpenseEditForm(data);
                     } else if (dx < -THRESHOLD) {
                         // swipe left → delete
-                        if (confirm('Удалить трату?')) {
-                            await apiFetch(`${API_URL}/expenses/${expenseId}`, { method: 'DELETE' });
+                        if (confirm(entryType === 'income' ? 'Удалить доход?' : 'Удалить запись о расходе?')) {
+                            await apiFetch(`${API_URL}/${getApiPathByType(entryType)}/${entryId}`, { method: 'DELETE' });
                             await updateDashboard();
                         }
                     }
@@ -801,19 +1002,22 @@
                 const startStr = toDateInputValue(firstDay);
                 const endStr = toDateInputValue(lastDay);
 
-                // Fetch expenses for month
-                try {
-                    const response = await apiFetch(`${API_URL}/expenses?period=all`);
-                    if (!response.ok) return;
-                    const all = await response.json();
-                    calendarExpensesCache = all.filter(exp => {
-                        const d = exp.date ? exp.date.slice(0, 10) : '';
-                        return d >= startStr && d <= endStr;
-                    });
-                } catch (e) {
-                    console.error('Calendar fetch error', e);
-                    return;
+                // Use already loaded cache and fallback to fetch if cache is not ready yet
+                let sourceExpenses = Array.isArray(allExpensesCache) ? allExpensesCache : [];
+                if (sourceExpenses.length === 0) {
+                    try {
+                        const response = await apiFetch(`${API_URL}/expenses?period=all`);
+                        if (!response.ok) return;
+                        sourceExpenses = await response.json();
+                    } catch (e) {
+                        console.error('Calendar fetch error', e);
+                        return;
+                    }
                 }
+                calendarExpensesCache = sourceExpenses.filter(exp => {
+                    const d = exp.date ? exp.date.slice(0, 10) : '';
+                    return d >= startStr && d <= endStr;
+                });
 
                 // Aggregate by day
                 const dayMap = {}; // day -> { total, categoryTotals: { id: { total, color, name } } }
@@ -950,7 +1154,7 @@
                     const selectedCategory = categorySummary.find(item => item.categoryId === dayChartSelectedCategoryId);
                     if (selectedCategory) {
                         summary = Array.from(selectedCategory.bySubcategory.values())
-                            .map(sub => ({ ...sub, color: selectedCategory.color }))
+                            .map((sub, index) => ({ ...sub, color: getSubcategoryTint(selectedCategory.color, index) }))
                             .sort((a, b) => b.total - a.total);
                         title = `Подкатегории: ${selectedCategory.label}`;
                     } else {
@@ -978,11 +1182,13 @@
                 if (summary.length === 0) {
                     dayChartEmpty.classList.remove('hidden');
                     dayExpenseChartCanvas.classList.add('hidden');
+                    dayChartBackBtn.classList.add('hidden');
                     return;
                 }
 
                 dayChartEmpty.classList.add('hidden');
                 dayExpenseChartCanvas.classList.remove('hidden');
+                dayChartBackBtn.classList.toggle('hidden', dayChartMode !== 'subcategory');
                 dayExpenseChart = new Chart(dayExpenseChartCanvas, {
                     type: 'doughnut',
                     data: {
@@ -1014,6 +1220,22 @@
                             }
                         },
                     },
+                    plugins: [{
+                        id: 'dayChartCenterReturnHint',
+                        afterDraw(chart) {
+                            if (dayChartMode !== 'subcategory') return;
+                            const { ctx, chartArea: { left, right, top, bottom } } = chart;
+                            const centerX = (left + right) / 2;
+                            const centerY = (top + bottom) / 2;
+                            ctx.save();
+                            ctx.font = `600 ${chartFont.center}px Arial`;
+                            ctx.fillStyle = '#666';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText('← Назад', centerX, centerY);
+                            ctx.restore();
+                        }
+                    }]
                 });
             };
 
@@ -1035,6 +1257,12 @@
 
             dayChartPrevBtn.addEventListener('click', () => shiftDayChartDate(-1));
             dayChartNextBtn.addEventListener('click', () => shiftDayChartDate(1));
+            dayChartBackBtn.addEventListener('click', () => {
+                if (dayChartMode !== 'subcategory' || !dayChartDate) return;
+                dayChartSelectedCategoryId = null;
+                dayChartMode = 'category';
+                renderDayExpenseChart(dayChartDate);
+            });
             toggleDayExpensesBtn.addEventListener('click', () => {
                 const isHidden = dayExpensesList.classList.toggle('hidden');
                 toggleDayExpensesBtn.textContent = isHidden ? 'Показать траты за день' : 'Скрыть траты за день';
@@ -1181,12 +1409,12 @@
 
             const renderRecentExpenses = () => {
                 recentExpenseList.innerHTML = '';
-                const recent = allExpensesCache.slice(0, RECENT_EXPENSE_LIMIT);
+                const recent = allTransactionsCache.slice(0, RECENT_EXPENSE_LIMIT);
                 if (recent.length === 0) {
-                    recentExpenseList.innerHTML = '<li>Пока нет трат.</li>';
+                    recentExpenseList.innerHTML = '<li>Пока нет записей.</li>';
                     return;
                 }
-                recent.forEach((expense, index) => recentExpenseList.appendChild(renderExpenseRow(expense, index)));
+                recent.forEach((entry, index) => recentExpenseList.appendChild(renderTransactionRow(entry, index)));
             };
 
             const renderExpensesPage = () => {
@@ -1194,15 +1422,15 @@
                 const visible = filteredExpensesPage.slice(0, expensesVisibleCount);
                 let lastDate = '';
                 visible.forEach((expense, index) => {
-                    const expenseDate = (expense.date || '').slice(0, 10);
-                    if (expenseDate && expenseDate !== lastDate) {
+                    const entryDate = (expense.date || '').slice(0, 10);
+                    if (entryDate && entryDate !== lastDate) {
                         const separator = document.createElement('li');
                         separator.className = 'expense-date-separator';
-                        separator.innerHTML = `<span>${formatDateHeaderRu(expenseDate)}</span>`;
+                        separator.innerHTML = `<span>${formatDateHeaderRu(entryDate)}</span>`;
                         expensesPageList.appendChild(separator);
-                        lastDate = expenseDate;
+                        lastDate = entryDate;
                     }
-                    expensesPageList.appendChild(renderExpenseRow(expense, index));
+                    expensesPageList.appendChild(renderTransactionRow(expense, index));
                 });
 
                 expensesPageSummary.textContent = `Найдено: ${filteredExpensesPage.length}`;
@@ -1210,22 +1438,28 @@
             };
 
             const filterExpensesPage = () => {
-                const selectedCategoryId = expensesFilterCategory.value ? Number(expensesFilterCategory.value) : null;
+                const selectedCategory = expensesFilterCategory.value || '';
+                const selectedCategoryId = selectedCategory && selectedCategory !== '__income__' ? Number(selectedCategory) : null;
                 const query = (expensesFilterSearch.value || '').trim().toLowerCase();
                 const startDate = expensesFilterStart.value ? new Date(`${expensesFilterStart.value}T00:00:00`) : null;
                 const endDate = expensesFilterEnd.value ? new Date(`${expensesFilterEnd.value}T23:59:59`) : null;
 
-                filteredExpensesPage = allExpensesCache.filter(expense => {
+                filteredExpensesPage = allTransactionsCache.filter(expense => {
                     const expenseDate = new Date(expense.date);
                     if (startDate && expenseDate < startDate) return false;
                     if (endDate && expenseDate > endDate) return false;
-                    if (selectedCategoryId && Number(expense.category?.id) !== selectedCategoryId) return false;
+                    if (selectedCategory === '__income__' && expense.entryType !== 'income') return false;
+                    if (selectedCategoryId) {
+                        if (expense.entryType !== 'expense') return false;
+                        if (Number(expense.category?.id) !== selectedCategoryId) return false;
+                    }
 
                     if (query) {
                         const haystack = [
                             expense.description || '',
                             expense.category?.name || '',
                             expense.subcategory?.name || '',
+                            expense.entryType === 'income' ? 'доход' : 'расход',
                         ].join(' ').toLowerCase();
                         if (!haystack.includes(query)) return false;
                     }
@@ -1240,7 +1474,21 @@
                 const response = await apiFetch(`${API_URL}/expenses?period=all`);
                 if (!response.ok) throw new Error('Не удалось загрузить траты');
                 const expenses = await response.json();
-                allExpensesCache = expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+                allExpensesCache = expenses
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .map(expense => ({ ...expense, entryType: 'expense' }));
+            };
+
+            const refreshAllTransactions = async () => {
+                const response = await apiFetch(`${API_URL}/incomes?period=all`);
+                if (!response.ok) throw new Error('Не удалось загрузить доходы');
+                const incomes = await response.json();
+                const incomeEntries = incomes.map(income => ({ ...income, entryType: 'income' }));
+                allTransactionsCache = [...allExpensesCache, ...incomeEntries].sort((a, b) => {
+                    const dateDiff = new Date(b.date) - new Date(a.date);
+                    if (dateDiff !== 0) return dateDiff;
+                    return Number(b.id || 0) - Number(a.id || 0);
+                });
                 renderRecentExpenses();
                 filterExpensesPage();
             };
@@ -1325,7 +1573,6 @@
                     currentCategorySummary = await chartRes.json();
 
                     absoluteBalanceEl.textContent = `${Number(summary.absoluteBalance || 0).toFixed(2)} руб.`;
-                    periodIncomeEl.innerHTML = `Доход (месяц)<br><span style="color: var(--success); font-weight: bold;">+${Number(summary.totalIncomeForPeriod || 0).toFixed(2)}</span>`;
                     periodExpenseEl.innerHTML = `Расход (месяц)<br><span style="color: var(--danger); font-weight: bold;">-${Number(summary.totalExpenseForPeriod || 0).toFixed(2)}</span>`;
                     periodNetEl.innerHTML = `Итог (месяц)<br><span style="font-weight: bold;">${Number(summary.netPeriodResult || 0).toFixed(2)}</span>`;
 
@@ -1344,6 +1591,13 @@
                     }
 
                     await refreshAllExpenses();
+                    await refreshAllTransactions();
+                    if (currentViewId === 'calendar-view') {
+                        await renderCalendarView();
+                    }
+                    if (dayChartDate && calendarDayChartModal.style.display === 'block') {
+                        renderDayExpenseChart(dayChartDate);
+                    }
                 } catch (error) {
                     console.error('Ошибка обновления дашборда:', error);
                     dashboardErrorDiv.textContent = error.message || 'Ошибка загрузки данных. Попробуйте обновить страницу.';
@@ -1416,7 +1670,7 @@
                 expenseRecurringPeriod.value = '1';
                 expenseRecurringCustomDays.value = '';
                 updateRecurringUiState('expense');
-                populateSubcategories();
+                selectDefaultExpenseCategory();
                 expenseModal.style.display = 'block';
                 expenseAmountInput.focus();
             });
@@ -1666,41 +1920,60 @@
                 if (!target) return;
                 const id = target.dataset.id;
                 const type = target.dataset.type;
-                if (type !== 'expense') return;
+                if (type !== 'expense' && type !== 'income') return;
+                const endpoint = `${API_URL}/${getApiPathByType(type)}/${id}`;
 
                 if (target.classList.contains('delete-btn')) {
-                    if (!confirm('Вы уверены, что хотите удалить эту трату?')) return;
-                    await apiFetch(`${API_URL}/expenses/${id}`, { method: 'DELETE' });
+                    if (!confirm(type === 'income'
+                        ? 'Вы уверены, что хотите удалить этот доход?'
+                        : 'Вы уверены, что хотите удалить эту запись о расходе?')) return;
+                    await apiFetch(endpoint, { method: 'DELETE' });
                     await updateDashboard();
                 }
 
                 if (target.classList.contains('edit-btn')) {
-                    const response = await apiFetch(`${API_URL}/expenses/${id}`);
+                    const response = await apiFetch(endpoint);
                     if (!response.ok) return;
                     const data = await response.json();
-                    openExpenseEditForm(data);
+                    if (type === 'income') openIncomeEditForm(data);
+                    else openExpenseEditForm(data);
                 }
 
                 if (target.classList.contains('repeat-btn')) {
-                    const response = await apiFetch(`${API_URL}/expenses/${id}`);
+                    const response = await apiFetch(endpoint);
                     if (!response.ok) return;
                     const data = await response.json();
-                    expenseModalTitle.textContent = 'Повторить расход';
-                    expenseIdInput.value = ''; // new record
-                    expenseAmountInput.value = data.amount;
-                    expenseDateInput.value = getTodayDateString();
-                    expenseDescriptionInput.value = data.description || '';
-                    expenseCategorySelect.value = data.category?.id || '';
-                    populateSubcategories(data.subcategory?.id);
-                    expenseAmountInput.readOnly = false;
-                    expenseAmountHint.classList.add('hidden');
-                    expenseRecurringEnabled.checked = false;
-                    expenseRecurringPeriod.value = '1';
-                    expenseRecurringCustomDays.value = '';
-                    updateRecurringUiState('expense');
-                    expenseErrorDiv.textContent = '';
-                    expenseModal.style.display = 'block';
-                    expenseAmountInput.focus();
+                    if (type === 'income') {
+                        incomeModalTitle.textContent = 'Повторить доход';
+                        incomeIdInput.value = '';
+                        incomeAmountInput.value = data.amount;
+                        incomeDateInput.value = getTodayDateString();
+                        incomeDescriptionInput.value = data.description || '';
+                        incomeRecurringEnabled.checked = false;
+                        incomeRecurringPeriod.value = '1';
+                        incomeRecurringCustomDays.value = '';
+                        updateRecurringUiState('income');
+                        incomeErrorDiv.textContent = '';
+                        incomeModal.style.display = 'block';
+                        incomeAmountInput.focus();
+                    } else {
+                        expenseModalTitle.textContent = 'Повторить расход';
+                        expenseIdInput.value = ''; // new record
+                        expenseAmountInput.value = data.amount;
+                        expenseDateInput.value = getTodayDateString();
+                        expenseDescriptionInput.value = data.description || '';
+                        expenseCategorySelect.value = data.category?.id || '';
+                        populateSubcategories(data.subcategory?.id);
+                        expenseAmountInput.readOnly = false;
+                        expenseAmountHint.classList.add('hidden');
+                        expenseRecurringEnabled.checked = false;
+                        expenseRecurringPeriod.value = '1';
+                        expenseRecurringCustomDays.value = '';
+                        updateRecurringUiState('expense');
+                        expenseErrorDiv.textContent = '';
+                        expenseModal.style.display = 'block';
+                        expenseAmountInput.focus();
+                    }
                 }
             };
 
@@ -1733,6 +2006,35 @@
                 updateDashboard().catch(() => {});
             });
 
+            const runAutoSync = async () => {
+                if (autoSyncInProgress) return;
+                if (initInProgress) return;
+                if (document.hidden) return;
+                if (!navigator.onLine) return;
+                if (!getToken()) return;
+                autoSyncInProgress = true;
+                try {
+                    await updateDashboard();
+                } catch (_) {
+                    // keep silent for background sync
+                } finally {
+                    autoSyncInProgress = false;
+                }
+            };
+
+            const startAutoSync = () => {
+                if (autoSyncTimerId) clearInterval(autoSyncTimerId);
+                autoSyncTimerId = window.setInterval(() => {
+                    runAutoSync().catch(() => {});
+                }, AUTO_SYNC_INTERVAL_MS);
+            };
+
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    runAutoSync().catch(() => {});
+                }
+            });
+
             renderPalettes();
             updateRecurringUiState('expense');
             updateRecurringUiState('income');
@@ -1744,6 +2046,7 @@
             await processRecurringRules();
             await updateDashboard();
             setActiveView('dashboard-view');
+            startAutoSync();
 
             appInitialized = true;
             console.log('main.js: Инициализация завершена.');
