@@ -1211,8 +1211,8 @@
                             if (dayChartMode === 'subcategory') {
                                 const firstArc = chart.getDatasetMeta(0)?.data?.[0];
                                 if (firstArc) {
-                                    const clickX = Number(event?.x);
-                                    const clickY = Number(event?.y);
+                                    const clickX = Number(event?.native?.offsetX ?? event?.x);
+                                    const clickY = Number(event?.native?.offsetY ?? event?.y);
                                     if (!Number.isFinite(clickX) || !Number.isFinite(clickY)) {
                                         return;
                                     }
