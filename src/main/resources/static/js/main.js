@@ -1211,8 +1211,11 @@
                             if (dayChartMode === 'subcategory') {
                                 const firstArc = chart.getDatasetMeta(0)?.data?.[0];
                                 if (firstArc) {
-                                    const clickX = event?.x ?? 0;
-                                    const clickY = event?.y ?? 0;
+                                    const clickX = Number(event?.x);
+                                    const clickY = Number(event?.y);
+                                    if (!Number.isFinite(clickX) || !Number.isFinite(clickY)) {
+                                        return;
+                                    }
                                     const dx = clickX - firstArc.x;
                                     const dy = clickY - firstArc.y;
                                     const distance = Math.sqrt(dx * dx + dy * dy);
