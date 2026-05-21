@@ -3,8 +3,8 @@ package com.example.financemanager.service;
 import com.example.financemanager.dto.AuthResponseDto;
 import com.example.financemanager.dto.LoginRequestDto;
 import com.example.financemanager.dto.RegisterRequestDto;
+import com.example.financemanager.dto.UpdateDisplayNameRequestDto;
 import com.example.financemanager.dto.UpdatePasswordRequestDto;
-import com.example.financemanager.dto.UpdateUsernameRequestDto;
 import com.example.financemanager.entity.Category;
 import com.example.financemanager.entity.Subcategory;
 import com.example.financemanager.entity.User;
@@ -37,13 +37,14 @@ public class AuthService {
 
         User user = new User();
         user.setUsername(request.getUsername());
+        user.setDisplayName(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         userRepository.save(user);
 
         seedDefaultCategories(user);
 
         String token = jwtService.generateToken(user);
-        return new AuthResponseDto(token, user.getUsername());
+        return toAuthResponse(user, token);
     }
 
     public AuthResponseDto login(LoginRequestDto request) {
@@ -55,25 +56,21 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(user);
-        return new AuthResponseDto(token, user.getUsername());
+        if (user.getDisplayName() == null || user.getDisplayName().isBlank()) {
+            user.setDisplayName(user.getUsername());
+            userRepository.save(user);
+        }
+        return toAuthResponse(user, token);
     }
 
     @Transactional
-    public AuthResponseDto updateUsername(UpdateUsernameRequestDto request) {
+    public AuthResponseDto updateDisplayName(UpdateDisplayNameRequestDto request) {
         User user = currentUserResolver.getCurrentUser();
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new IllegalArgumentException("Текущий пароль указан неверно.");
-        }
-
-        String nextUsername = request.getNewUsername().trim();
-        if (!nextUsername.equals(user.getUsername()) && userRepository.existsByUsername(nextUsername)) {
-            throw new DuplicateResourceException("Пользователь с логином '" + nextUsername + "' уже существует.");
-        }
-
-        user.setUsername(nextUsername);
+        String nextDisplayName = request.getDisplayName().trim();
+        user.setDisplayName(nextDisplayName);
         userRepository.save(user);
         String token = jwtService.generateToken(user);
-        return new AuthResponseDto(token, user.getUsername());
+        return toAuthResponse(user, token);
     }
 
     @Transactional
@@ -89,7 +86,14 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
         String token = jwtService.generateToken(user);
-        return new AuthResponseDto(token, user.getUsername());
+        return toAuthResponse(user, token);
+    }
+
+    private AuthResponseDto toAuthResponse(User user, String token) {
+        String displayName = user.getDisplayName() == null || user.getDisplayName().isBlank()
+                ? user.getUsername()
+                : user.getDisplayName();
+        return new AuthResponseDto(token, user.getUsername(), displayName);
     }
 
     private void seedDefaultCategories(User user) {

@@ -1,8 +1,8 @@
 package com.example.financemanager.controller;
 
 import com.example.financemanager.dto.AuthResponseDto;
+import com.example.financemanager.dto.UpdateDisplayNameRequestDto;
 import com.example.financemanager.dto.UpdatePasswordRequestDto;
-import com.example.financemanager.dto.UpdateUsernameRequestDto;
 import com.example.financemanager.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,9 +19,9 @@ public class AccountController {
 
     private final AuthService authService;
 
-    @PutMapping("/username")
-    public ResponseEntity<AuthResponseDto> updateUsername(@Valid @RequestBody UpdateUsernameRequestDto request) {
-        return ResponseEntity.ok(authService.updateUsername(request));
+    @PutMapping("/display-name")
+    public ResponseEntity<AuthResponseDto> updateDisplayName(@Valid @RequestBody UpdateDisplayNameRequestDto request) {
+        return ResponseEntity.ok(authService.updateDisplayName(request));
     }
 
     @PutMapping("/password")

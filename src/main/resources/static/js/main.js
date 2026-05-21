@@ -8,6 +8,7 @@
 
     const TOKEN_KEY = 'finance_jwt_token';
     const USERNAME_KEY = 'finance_username';
+    const DISPLAY_NAME_KEY = 'finance_display_name';
     const THEME_KEY_PREFIX = 'finance_theme';
     const FONT_SIZE_KEY_PREFIX = 'finance_font_size';
     const RECURRING_RULES_KEY_PREFIX = 'finance_recurring_rules';
@@ -20,6 +21,8 @@
     const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
     const getStoredUsername = () => localStorage.getItem(USERNAME_KEY);
     const setStoredUsername = (username) => localStorage.setItem(USERNAME_KEY, username);
+    const getStoredDisplayName = () => localStorage.getItem(DISPLAY_NAME_KEY);
+    const setStoredDisplayName = (displayName) => localStorage.setItem(DISPLAY_NAME_KEY, displayName);
     const getStorageScope = (username = getStoredUsername()) => {
         const normalizedUsername = (username || '').trim();
         if (normalizedUsername) return `user:${normalizedUsername}`;
@@ -28,22 +31,10 @@
     const getScopedStorageKey = (prefix, username = getStoredUsername()) => {
         return `${prefix}:${getStorageScope(username)}`;
     };
-    const migrateScopedSettings = (previousUsername, nextUsername) => {
-        if (!previousUsername || !nextUsername || previousUsername === nextUsername) return;
-        [THEME_KEY_PREFIX, FONT_SIZE_KEY_PREFIX, RECURRING_RULES_KEY_PREFIX].forEach(prefix => {
-            const oldKey = getScopedStorageKey(prefix, previousUsername);
-            const newKey = getScopedStorageKey(prefix, nextUsername);
-            if (oldKey === newKey) return;
-            const value = localStorage.getItem(oldKey);
-            if (value === null) return;
-            localStorage.setItem(newKey, value);
-            localStorage.removeItem(oldKey);
-        });
-    };
-
     const logout = () => {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USERNAME_KEY);
+        localStorage.removeItem(DISPLAY_NAME_KEY);
         window.location.reload();
     };
 
@@ -56,7 +47,8 @@
         document.getElementById('auth-page').style.display = 'none';
         document.getElementById('app-page').style.display = 'block';
         const usernameEl = document.getElementById('current-username');
-        if (usernameEl) usernameEl.textContent = getStoredUsername() || '';
+        const displayName = getStoredDisplayName() || getStoredUsername() || '';
+        if (usernameEl) usernameEl.textContent = displayName;
     };
 
     const applyTheme = (theme) => {
@@ -138,6 +130,7 @@
                     const data = await response.json();
                     setToken(data.token);
                     setStoredUsername(data.username);
+                    setStoredDisplayName(data.displayName || data.username);
                     showApp();
                     main().catch(err => console.error(err));
                 } else {
@@ -165,6 +158,7 @@
                     if (data?.token && data?.username) {
                         setToken(data.token);
                         setStoredUsername(data.username);
+                        setStoredDisplayName(data.displayName || data.username);
                     } else {
                         const loginResponse = await fetch(`${API_URL}/auth/login`, {
                             method: 'POST',
@@ -177,6 +171,7 @@
                         const loginData = await loginResponse.json();
                         setToken(loginData.token);
                         setStoredUsername(loginData.username);
+                        setStoredDisplayName(loginData.displayName || loginData.username);
                     }
                     showApp();
                     main().catch(err => console.error(err));
@@ -291,9 +286,9 @@
             const exportBackupBtn = getElement('export-backup-btn');
             const importBackupBtn = getElement('import-backup-btn');
             const importBackupFileInput = getElement('import-backup-file-input');
-            const updateUsernameForm = getElement('update-username-form');
+            const updateDisplayNameForm = getElement('update-display-name-form');
             const newUsernameInput = getElement('new-username-input');
-            const usernameCurrentPasswordInput = getElement('username-current-password-input');
+            const displayNameInput = getElement('display-name-input');
             const updatePasswordForm = getElement('update-password-form');
             const passwordCurrentInput = getElement('password-current-input');
             const newPasswordInput = getElement('new-password-input');
@@ -351,9 +346,9 @@
             const dayChartDateLabel = getElement('day-chart-date-label');
             const dayChartPrevBtn = getElement('day-chart-prev-btn');
             const dayChartNextBtn = getElement('day-chart-next-btn');
-            const dayChartBackBtn = getElement('day-chart-back-btn');
             const dayExpenseChartCanvas = getElement('day-expense-chart');
             const dayChartEmpty = getElement('day-chart-empty');
+            const dayExpensesFilterHint = getElement('day-expenses-filter-hint');
             const toggleDayExpensesBtn = getElement('toggle-day-expenses-btn');
             const dayExpensesList = getElement('day-expenses-list');
 
@@ -368,6 +363,7 @@
             fontSizeSelect.value = initialFontSize;
             receiptApiTokenInput.value = '';
             newUsernameInput.value = getStoredUsername() || '';
+            displayNameInput.value = getStoredDisplayName() || getStoredUsername() || '';
             periodIncomeEl.classList.add('hidden');
 
             darkThemeToggle.addEventListener('change', () => {
@@ -387,12 +383,9 @@
             saveReceiptApiTokenBtn.addEventListener('click', () => {
                 const token = (receiptApiTokenInput.value || '').trim();
                 receiptApiTokenValue = token;
-                dashboardErrorDiv.textContent = token
+                showSettingsMessage(token
                     ? 'Токен для proverkachecka.com сохранен в текущей сессии.'
-                    : 'Токен очищен. Используется серверный токен.';
-                setTimeout(() => {
-                    if (dashboardErrorDiv.textContent.includes('Токен')) dashboardErrorDiv.textContent = '';
-                }, 3000);
+                    : 'Токен очищен. Используется серверный токен.');
             });
 
             toggleExpensesFiltersBtn.addEventListener('click', () => {
@@ -416,8 +409,9 @@
                     link.click();
                     URL.revokeObjectURL(link.href);
                     link.remove();
+                    showSettingsMessage('Backup успешно экспортирован.');
                 } catch (error) {
-                    dashboardErrorDiv.textContent = error.message || 'Ошибка экспорта backup';
+                    showSettingsMessage(error.message || 'Ошибка экспорта backup', true);
                 }
             });
 
@@ -436,12 +430,13 @@
                         const err = await response.json().catch(() => ({}));
                         throw new Error(err.message || 'Не удалось импортировать backup');
                     }
-                    importBackupFileInput.value = '';
                     await fetchCategories();
                     await updateDashboard();
-                    dashboardErrorDiv.textContent = 'Backup успешно импортирован.';
+                    showSettingsMessage('Backup успешно импортирован.');
                 } catch (error) {
-                    dashboardErrorDiv.textContent = error.message || 'Ошибка импорта backup';
+                    showSettingsMessage(error.message || 'Ошибка импорта backup', true);
+                } finally {
+                    importBackupFileInput.value = '';
                 }
             });
 
@@ -456,36 +451,32 @@
                 }, 4000);
             };
 
-            updateUsernameForm.addEventListener('submit', async (event) => {
+            updateDisplayNameForm.addEventListener('submit', async (event) => {
                 event.preventDefault();
-                const newUsername = (newUsernameInput.value || '').trim();
-                const currentPassword = (usernameCurrentPasswordInput.value || '').trim();
-                if (!newUsername || !currentPassword) {
-                    showSettingsMessage('Заполните новый логин и текущий пароль.', true);
+                const displayName = (displayNameInput.value || '').trim();
+                if (!displayName) {
+                    showSettingsMessage('Введите имя пользователя.', true);
                     return;
                 }
-                const previousUsername = getStoredUsername() || '';
                 try {
-                    const response = await apiFetch(`${API_URL}/account/username`, {
+                    const response = await apiFetch(`${API_URL}/account/display-name`, {
                         method: 'PUT',
-                        body: JSON.stringify({ newUsername, currentPassword }),
+                        body: JSON.stringify({ displayName }),
                     });
                     if (!response.ok) {
                         const err = await response.json().catch(() => ({}));
-                        showSettingsMessage(err.message || 'Не удалось обновить логин.', true);
+                        showSettingsMessage(err.message || 'Не удалось обновить имя пользователя.', true);
                         return;
                     }
                     const data = await response.json();
-                    migrateScopedSettings(previousUsername, data.username);
                     setToken(data.token);
-                    setStoredUsername(data.username);
+                    setStoredDisplayName(data.displayName || data.username);
                     showApp();
-                    newUsernameInput.value = data.username;
-                    usernameCurrentPasswordInput.value = '';
-                    showSettingsMessage('Логин успешно обновлен.');
+                    displayNameInput.value = data.displayName || data.username || displayName;
+                    showSettingsMessage('Имя пользователя обновлено.');
                     await updateDashboard();
                 } catch (error) {
-                    showSettingsMessage(error.message || 'Ошибка обновления логина.', true);
+                    showSettingsMessage(error.message || 'Ошибка обновления имени пользователя.', true);
                 }
             });
 
@@ -571,6 +562,7 @@
             let dayExpenseChart = null;
             let dayChartMode = 'category';
             let dayChartSelectedCategoryId = null;
+            let dayChartSelectedCategoryName = '';
             let receiptApiTokenValue = '';
             let currentViewId = 'dashboard-view';
             let autoSyncTimerId = null;
@@ -1150,6 +1142,7 @@
                 const categorySummary = Array.from(byCategory.values()).sort((a, b) => b.total - a.total);
                 let summary = categorySummary;
                 let title = 'Расходы за день';
+                let filteredDayExpenses = dayExpenses;
                 if (dayChartMode === 'subcategory' && dayChartSelectedCategoryId !== null) {
                     const selectedCategory = categorySummary.find(item => item.categoryId === dayChartSelectedCategoryId);
                     if (selectedCategory) {
@@ -1157,15 +1150,18 @@
                             .map((sub, index) => ({ ...sub, color: getSubcategoryTint(selectedCategory.color, index) }))
                             .sort((a, b) => b.total - a.total);
                         title = `Подкатегории: ${selectedCategory.label}`;
+                        dayChartSelectedCategoryName = selectedCategory.label;
+                        filteredDayExpenses = dayExpenses.filter(exp => Number(exp.category?.id || 0) === dayChartSelectedCategoryId);
                     } else {
                         dayChartMode = 'category';
                         dayChartSelectedCategoryId = null;
+                        dayChartSelectedCategoryName = '';
                     }
                 }
 
                 if (dayExpenseChart) dayExpenseChart.destroy();
                 dayExpensesList.innerHTML = '';
-                dayExpenses.forEach(expense => {
+                filteredDayExpenses.forEach(expense => {
                     const item = document.createElement('li');
                     item.innerHTML = `
                         <div class="transaction-main">
@@ -1178,17 +1174,22 @@
                     `;
                     dayExpensesList.appendChild(item);
                 });
+                if (dayChartMode === 'subcategory' && dayChartSelectedCategoryName) {
+                    dayExpensesFilterHint.textContent = `Показаны траты категории: ${dayChartSelectedCategoryName}`;
+                    dayExpensesFilterHint.classList.remove('hidden');
+                } else {
+                    dayExpensesFilterHint.textContent = '';
+                    dayExpensesFilterHint.classList.add('hidden');
+                }
 
                 if (summary.length === 0) {
                     dayChartEmpty.classList.remove('hidden');
                     dayExpenseChartCanvas.classList.add('hidden');
-                    dayChartBackBtn.classList.add('hidden');
                     return;
                 }
 
                 dayChartEmpty.classList.add('hidden');
                 dayExpenseChartCanvas.classList.remove('hidden');
-                dayChartBackBtn.classList.toggle('hidden', dayChartMode !== 'subcategory');
                 dayExpenseChart = new Chart(dayExpenseChartCanvas, {
                     type: 'doughnut',
                     data: {
@@ -1206,16 +1207,29 @@
                             legend: { position: 'top', labels: { font: { size: chartFont.legend } } },
                             title: { display: true, text: title, font: { size: chartFont.title } },
                         },
-                        onClick: (_, elements) => {
-                            if (dayChartMode === 'category' && elements.length > 0) {
-                                dayChartSelectedCategoryId = summary[elements[0].index]?.categoryId ?? null;
-                                dayChartMode = 'subcategory';
-                                renderDayExpenseChart(targetDateIso);
-                                return;
+                        onClick: (event, elements, chart) => {
+                            if (dayChartMode === 'subcategory') {
+                                const firstArc = chart.getDatasetMeta(0)?.data?.[0];
+                                if (firstArc) {
+                                    const clickX = event?.x ?? 0;
+                                    const clickY = event?.y ?? 0;
+                                    const dx = clickX - firstArc.x;
+                                    const dy = clickY - firstArc.y;
+                                    const distance = Math.sqrt(dx * dx + dy * dy);
+                                    if (distance <= firstArc.innerRadius) {
+                                        dayChartSelectedCategoryId = null;
+                                        dayChartSelectedCategoryName = '';
+                                        dayChartMode = 'category';
+                                        renderDayExpenseChart(targetDateIso);
+                                        return;
+                                    }
+                                }
                             }
-                            if (dayChartMode === 'subcategory' && elements.length === 0) {
-                                dayChartSelectedCategoryId = null;
-                                dayChartMode = 'category';
+                            if (dayChartMode === 'category' && elements.length > 0) {
+                                const nextCategory = summary[elements[0].index];
+                                dayChartSelectedCategoryId = nextCategory?.categoryId ?? null;
+                                dayChartSelectedCategoryName = nextCategory?.label || '';
+                                dayChartMode = 'subcategory';
                                 renderDayExpenseChart(targetDateIso);
                             }
                         },
@@ -1232,7 +1246,7 @@
                             ctx.fillStyle = '#666';
                             ctx.textAlign = 'center';
                             ctx.textBaseline = 'middle';
-                            ctx.fillText('← Назад', centerX, centerY);
+                            ctx.fillText('Назад', centerX, centerY);
                             ctx.restore();
                         }
                     }]
@@ -1242,6 +1256,9 @@
             const openDayChart = (targetDateIso) => {
                 dayChartMode = 'category';
                 dayChartSelectedCategoryId = null;
+                dayChartSelectedCategoryName = '';
+                dayExpensesFilterHint.textContent = '';
+                dayExpensesFilterHint.classList.add('hidden');
                 dayExpensesList.classList.add('hidden');
                 toggleDayExpensesBtn.textContent = 'Показать траты за день';
                 renderDayExpenseChart(targetDateIso);
@@ -1257,12 +1274,6 @@
 
             dayChartPrevBtn.addEventListener('click', () => shiftDayChartDate(-1));
             dayChartNextBtn.addEventListener('click', () => shiftDayChartDate(1));
-            dayChartBackBtn.addEventListener('click', () => {
-                if (dayChartMode !== 'subcategory' || !dayChartDate) return;
-                dayChartSelectedCategoryId = null;
-                dayChartMode = 'category';
-                renderDayExpenseChart(dayChartDate);
-            });
             toggleDayExpensesBtn.addEventListener('click', () => {
                 const isHidden = dayExpensesList.classList.toggle('hidden');
                 toggleDayExpensesBtn.textContent = isHidden ? 'Показать траты за день' : 'Скрыть траты за день';

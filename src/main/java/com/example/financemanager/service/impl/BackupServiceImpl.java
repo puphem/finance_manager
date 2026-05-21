@@ -88,6 +88,7 @@ public class BackupServiceImpl implements BackupService {
         expenseRepository.deleteAllByUser(user);
         incomeRepository.deleteAllByUser(user);
         receiptRepository.deleteAllByUser(user);
+        subcategoryRepository.deleteAllByCategoryUser(user);
         categoryRepository.deleteAllByUser(user);
 
         Map<String, Category> categoriesByName = new HashMap<>();
