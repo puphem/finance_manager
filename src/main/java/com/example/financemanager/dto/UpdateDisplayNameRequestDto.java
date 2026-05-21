@@ -8,6 +8,6 @@ import lombok.Data;
 public class UpdateDisplayNameRequestDto {
 
     @NotBlank(message = "Имя пользователя не может быть пустым")
-    @Size(min = 1, max = 80, message = "Имя пользователя должно содержать от 1 до 80 символов")
+    @Size(max = 80, message = "Имя пользователя должно содержать не более 80 символов")
     private String displayName;
 }
