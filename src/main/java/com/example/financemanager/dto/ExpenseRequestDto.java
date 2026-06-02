@@ -19,6 +19,7 @@ public class ExpenseRequestDto {
     private Long categoryId;
 
     private Long subcategoryId;
+    private Long suggestedCategoryId;
 
     private String description;
 

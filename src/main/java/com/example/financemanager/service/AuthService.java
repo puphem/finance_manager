@@ -1,14 +1,15 @@
 package com.example.financemanager.service;
 
-import com.example.financemanager.dto.AuthResponseDto;
-import com.example.financemanager.dto.LoginRequestDto;
-import com.example.financemanager.dto.RegisterRequestDto;
-import com.example.financemanager.dto.UpdateDisplayNameRequestDto;
-import com.example.financemanager.dto.UpdatePasswordRequestDto;
+import com.example.financemanager.dto.*;
+import com.example.financemanager.entity.AccountProviderLink;
 import com.example.financemanager.entity.Category;
 import com.example.financemanager.entity.Subcategory;
 import com.example.financemanager.entity.User;
+import com.example.financemanager.entity.enums.AuthState;
+import com.example.financemanager.entity.enums.LoginProvider;
+import com.example.financemanager.entity.enums.UserStatus;
 import com.example.financemanager.exception.DuplicateResourceException;
+import com.example.financemanager.repository.AccountProviderLinkRepository;
 import com.example.financemanager.repository.CategoryRepository;
 import com.example.financemanager.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +18,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -25,42 +28,197 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
+    private final AccountProviderLinkRepository accountProviderLinkRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final CurrentUserResolver currentUserResolver;
+    private final TotpService totpService;
 
     @Transactional
     public AuthResponseDto register(RegisterRequestDto request) {
-        if (userRepository.existsByUsername(request.getUsername())) {
+        userRepository.findByUsername(request.getUsername()).ifPresent(existing -> {
             throw new DuplicateResourceException("Пользователь с логином '" + request.getUsername() + "' уже существует.");
-        }
+        });
 
         User user = new User();
         user.setUsername(request.getUsername());
         user.setDisplayName(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setStatus(UserStatus.ACTIVE);
         userRepository.save(user);
+
+        AccountProviderLink localLink = new AccountProviderLink();
+        localLink.setUser(user);
+        localLink.setProvider(LoginProvider.LOCAL);
+        localLink.setProviderUserId(user.getUsername());
+        accountProviderLinkRepository.save(localLink);
 
         seedDefaultCategories(user);
 
-        String token = jwtService.generateToken(user);
-        return toAuthResponse(user, token);
+        String token = jwtService.generateToken(user, AuthState.AUTHENTICATED);
+        return toAuthResponse(user, token, AuthState.AUTHENTICATED);
     }
 
+    @Transactional
     public AuthResponseDto login(LoginRequestDto request) {
-        User user = userRepository.findByUsername(request.getUsername())
+        User user = userRepository.findByUsernameAndStatus(request.getUsername(), UserStatus.ACTIVE)
                 .orElseThrow(() -> new BadCredentialsException("Неверный логин или пароль."));
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+        if (user.getPassword() == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new BadCredentialsException("Неверный логин или пароль.");
         }
 
-        String token = jwtService.generateToken(user);
+        if (user.isMfaEnabled()) {
+            if (request.getRecoveryCode() != null && !request.getRecoveryCode().isBlank() && consumeRecoveryCode(user, request.getRecoveryCode())) {
+                userRepository.save(user);
+            } else if (!totpService.verifyCode(user.getMfaSecret(), request.getMfaCode())) {
+                String token = jwtService.generateToken(user, AuthState.MFA_REQUIRED);
+                return toAuthResponse(user, token, AuthState.MFA_REQUIRED);
+            }
+        }
+
         if (user.getDisplayName() == null || user.getDisplayName().isBlank()) {
             user.setDisplayName(user.getUsername());
             userRepository.save(user);
         }
-        return toAuthResponse(user, token);
+
+        String token = jwtService.generateToken(user, AuthState.AUTHENTICATED);
+        return toAuthResponse(user, token, AuthState.AUTHENTICATED);
+    }
+
+    @Transactional
+    public AuthResponseDto oauthLogin(OAuthLoginRequestDto request) {
+        AccountProviderLink existingLink = accountProviderLinkRepository
+                .findByProviderAndProviderUserId(request.getProvider(), request.getProviderUserId())
+                .orElse(null);
+
+        User user;
+        boolean recovered = false;
+
+        if (existingLink != null) {
+            user = existingLink.getUser();
+            if (user.getStatus() == UserStatus.DELETED) {
+                user.setStatus(UserStatus.ACTIVE);
+                recovered = true;
+            }
+        } else {
+            String baseUsername = normalizeOAuthUsername(request);
+            user = userRepository.findByUsername(baseUsername).orElse(null);
+            if (user == null) {
+                user = new User();
+                user.setUsername(resolveUniqueUsername(baseUsername));
+                user.setDisplayName((request.getDisplayName() == null || request.getDisplayName().isBlank()) ? user.getUsername() : request.getDisplayName().trim());
+                user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+                user.setStatus(UserStatus.ACTIVE);
+                userRepository.save(user);
+                seedDefaultCategories(user);
+            } else if (user.getStatus() == UserStatus.DELETED) {
+                user.setStatus(UserStatus.ACTIVE);
+                recovered = true;
+            }
+
+            if (!accountProviderLinkRepository.existsByUserAndProvider(user, request.getProvider())) {
+                AccountProviderLink link = new AccountProviderLink();
+                link.setUser(user);
+                link.setProvider(request.getProvider());
+                link.setProviderUserId(request.getProviderUserId().trim());
+                link.setProviderEmail(request.getEmail());
+                accountProviderLinkRepository.save(link);
+            }
+        }
+
+        AuthState state = recovered ? AuthState.RECOVERY_FLOW : AuthState.AUTHENTICATED;
+        if (user.isMfaEnabled() && !recovered) {
+            state = AuthState.MFA_REQUIRED;
+        }
+        userRepository.save(user);
+        String token = jwtService.generateToken(user, state);
+        return toAuthResponse(user, token, state);
+    }
+
+    @Transactional
+    public void linkOAuth(OAuthLinkRequestDto request) {
+        User user = currentUserResolver.getCurrentUser();
+        if (request.getProvider() == LoginProvider.LOCAL) {
+            throw new IllegalArgumentException("Локальный провайдер нельзя привязать вручную.");
+        }
+
+        accountProviderLinkRepository.findByProviderAndProviderUserId(request.getProvider(), request.getProviderUserId().trim())
+                .ifPresent(link -> {
+                    if (!link.getUser().getId().equals(user.getId())) {
+                        throw new DuplicateResourceException("Эта OAuth-учетка уже привязана к другому пользователю.");
+                    }
+                });
+
+        if (accountProviderLinkRepository.existsByUserAndProvider(user, request.getProvider())) {
+            return;
+        }
+
+        AccountProviderLink link = new AccountProviderLink();
+        link.setUser(user);
+        link.setProvider(request.getProvider());
+        link.setProviderUserId(request.getProviderUserId().trim());
+        link.setProviderEmail(request.getEmail());
+        accountProviderLinkRepository.save(link);
+    }
+
+    @Transactional
+    public MfaSetupResponseDto setupTotp() {
+        User user = currentUserResolver.getCurrentUser();
+        String secret = totpService.generateSecret();
+        List<String> recoveryCodes = totpService.generateRecoveryCodes();
+        user.setMfaSecret(secret);
+        user.setMfaEnabled(false);
+        user.setMfaRecoveryCodes(String.join(",", recoveryCodes));
+        userRepository.save(user);
+        String otpAuth = totpService.buildOtpAuthUrl("FinanceManager", user.getUsername(), secret);
+        return new MfaSetupResponseDto(secret, otpAuth, recoveryCodes);
+    }
+
+    @Transactional
+    public AuthResponseDto enableTotp(MfaCodeRequestDto request) {
+        User user = currentUserResolver.getCurrentUser();
+        if (user.getMfaSecret() == null || user.getMfaSecret().isBlank()) {
+            throw new IllegalStateException("Сначала выполните настройку TOTP.");
+        }
+        if (!totpService.verifyCode(user.getMfaSecret(), request.getCode())) {
+            throw new IllegalArgumentException("Неверный TOTP-код.");
+        }
+        user.setMfaEnabled(true);
+        userRepository.save(user);
+        String token = jwtService.generateToken(user, AuthState.AUTHENTICATED);
+        return toAuthResponse(user, token, AuthState.AUTHENTICATED);
+    }
+
+    @Transactional
+    public AuthResponseDto disableTotp(MfaCodeRequestDto request) {
+        User user = currentUserResolver.getCurrentUser();
+        boolean validTotp = totpService.verifyCode(user.getMfaSecret(), request.getCode());
+        boolean validRecovery = consumeRecoveryCode(user, request.getCode());
+        if (!validTotp && !validRecovery) {
+            throw new IllegalArgumentException("Неверный код подтверждения.");
+        }
+        user.setMfaEnabled(false);
+        user.setMfaSecret(null);
+        user.setMfaRecoveryCodes(null);
+        userRepository.save(user);
+        String token = jwtService.generateToken(user, AuthState.AUTHENTICATED);
+        return toAuthResponse(user, token, AuthState.AUTHENTICATED);
+    }
+
+    @Transactional
+    public AuthResponseDto completeRecoveryFlow(RecoveryFlowCompleteRequestDto request) {
+        String token = request.getToken();
+        String username = jwtService.extractUsername(token);
+        User user = userRepository.findByUsernameAndStatus(username, UserStatus.ACTIVE)
+                .orElseThrow(() -> new BadCredentialsException("Пользователь не найден."));
+
+        if (!jwtService.isTokenValidForState(token, user, AuthState.RECOVERY_FLOW)) {
+            throw new BadCredentialsException("Токен восстановления недействителен.");
+        }
+
+        String authToken = jwtService.generateToken(user, AuthState.AUTHENTICATED);
+        return toAuthResponse(user, authToken, AuthState.AUTHENTICATED);
     }
 
     @Transactional
@@ -69,14 +227,14 @@ public class AuthService {
         String nextDisplayName = request.getDisplayName().trim();
         user.setDisplayName(nextDisplayName);
         userRepository.save(user);
-        String token = jwtService.generateToken(user);
-        return toAuthResponse(user, token);
+        String token = jwtService.generateToken(user, AuthState.AUTHENTICATED);
+        return toAuthResponse(user, token, AuthState.AUTHENTICATED);
     }
 
     @Transactional
     public AuthResponseDto updatePassword(UpdatePasswordRequestDto request) {
         User user = currentUserResolver.getCurrentUser();
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+        if (user.getPassword() == null || !passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
             throw new IllegalArgumentException("Текущий пароль указан неверно.");
         }
         if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
@@ -85,15 +243,59 @@ public class AuthService {
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
-        String token = jwtService.generateToken(user);
-        return toAuthResponse(user, token);
+        String token = jwtService.generateToken(user, AuthState.AUTHENTICATED);
+        return toAuthResponse(user, token, AuthState.AUTHENTICATED);
     }
 
-    private AuthResponseDto toAuthResponse(User user, String token) {
+    @Transactional
+    public void softDeleteAccount(DeactivateAccountRequestDto request) {
+        User user = currentUserResolver.getCurrentUser();
+        if (user.getPassword() == null || !passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("Текущий пароль указан неверно.");
+        }
+        user.setStatus(UserStatus.DELETED);
+        userRepository.save(user);
+    }
+
+    private AuthResponseDto toAuthResponse(User user, String token, AuthState authState) {
         String displayName = user.getDisplayName() == null || user.getDisplayName().isBlank()
                 ? user.getUsername()
                 : user.getDisplayName();
-        return new AuthResponseDto(token, user.getUsername(), displayName);
+        return new AuthResponseDto(token, user.getUsername(), displayName, authState.name().toLowerCase());
+    }
+
+    private boolean consumeRecoveryCode(User user, String rawCode) {
+        if (rawCode == null || rawCode.isBlank() || user.getMfaRecoveryCodes() == null || user.getMfaRecoveryCodes().isBlank()) {
+            return false;
+        }
+        String normalized = rawCode.trim().toUpperCase();
+        List<String> codes = Arrays.stream(user.getMfaRecoveryCodes().split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .toList();
+        if (!codes.contains(normalized)) {
+            return false;
+        }
+        List<String> remaining = codes.stream().filter(code -> !code.equals(normalized)).toList();
+        user.setMfaRecoveryCodes(String.join(",", remaining));
+        return true;
+    }
+
+    private String normalizeOAuthUsername(OAuthLoginRequestDto request) {
+        if (request.getUsername() != null && !request.getUsername().isBlank()) {
+            return request.getUsername().trim();
+        }
+        return request.getProvider().name().toLowerCase() + "_" + request.getProviderUserId().trim().toLowerCase();
+    }
+
+    private String resolveUniqueUsername(String baseUsername) {
+        String candidate = baseUsername;
+        int suffix = 1;
+        while (userRepository.existsByUsername(candidate)) {
+            candidate = baseUsername + "_" + suffix;
+            suffix++;
+        }
+        return candidate;
     }
 
     private void seedDefaultCategories(User user) {

@@ -1,6 +1,7 @@
 package com.example.financemanager.service;
 
 import com.example.financemanager.entity.User;
+import com.example.financemanager.entity.enums.UserStatus;
 import com.example.financemanager.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -16,12 +17,12 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return userRepository.findByUsername(username)
+        return userRepository.findByUsernameAndStatus(username, UserStatus.ACTIVE)
                 .orElseThrow(() -> new UsernameNotFoundException("Пользователь '" + username + "' не найден"));
     }
 
     public User loadUserEntityByUsername(String username) {
-        return userRepository.findByUsername(username)
+        return userRepository.findByUsernameAndStatus(username, UserStatus.ACTIVE)
                 .orElseThrow(() -> new UsernameNotFoundException("Пользователь '" + username + "' не найден"));
     }
 }

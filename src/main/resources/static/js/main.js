@@ -91,6 +91,33 @@
         return response;
     };
 
+    const finalizeRecoveryFlow = async (data) => {
+        if (data?.authState !== 'recovery_flow') return data;
+        const response = await fetch(`${API_URL}/auth/recovery/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: data.token }),
+        });
+        if (!response.ok) throw new Error('Не удалось завершить восстановление профиля.');
+        return response.json();
+    };
+
+    const resolveMfaLogin = async (username, password, data) => {
+        if (data?.authState !== 'mfa_required') return data;
+        const otpCode = window.prompt('Введите код из приложения-аутентификатора или резервный код:');
+        if (!otpCode) throw new Error('Требуется код 2FA.');
+        const payload = otpCode.length > 6
+            ? { username, password, recoveryCode: otpCode }
+            : { username, password, mfaCode: otpCode };
+        const response = await fetch(`${API_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error('Неверный код 2FA.');
+        return response.json();
+    };
+
     const setupAuthPage = () => {
         const tabLogin = document.getElementById('tab-login');
         const tabRegister = document.getElementById('tab-register');
@@ -127,7 +154,9 @@
                     body: JSON.stringify({ username, password }),
                 });
                 if (response.ok) {
-                    const data = await response.json();
+                    let data = await response.json();
+                    data = await resolveMfaLogin(username, password, data);
+                    data = await finalizeRecoveryFlow(data);
                     setToken(data.token);
                     setStoredUsername(data.username);
                     setStoredDisplayName(data.displayName || data.username);
@@ -154,8 +183,9 @@
                     body: JSON.stringify({ username, password }),
                 });
                 if (response.status === 201) {
-                    const data = await response.json().catch(() => null);
+                    let data = await response.json().catch(() => null);
                     if (data?.token && data?.username) {
+                        data = await finalizeRecoveryFlow(data);
                         setToken(data.token);
                         setStoredUsername(data.username);
                         setStoredDisplayName(data.displayName || data.username);
@@ -765,57 +795,31 @@
                 return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
             };
 
-            const getStoredRecurringRules = () => {
-                try {
-                    const parsed = JSON.parse(localStorage.getItem(getScopedStorageKey(RECURRING_RULES_KEY_PREFIX)) || '[]');
-                    return Array.isArray(parsed) ? parsed : [];
-                } catch (_) {
-                    return [];
+            const addRecurringRule = async (rule) => {
+                const response = await apiFetch(`${API_URL}/subscriptions`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        source: rule.source,
+                        amount: rule.payload.amount,
+                        entryType: rule.type === 'income' ? 'INCOME' : 'EXPENSE',
+                        periodDays: rule.intervalDays,
+                        nextChargeDate: rule.lastRunDate,
+                        autoPostEnabled: true,
+                        notificationEnabled: true,
+                        active: true,
+                        categoryId: rule.payload.categoryId || null,
+                        subcategoryId: rule.payload.subcategoryId || null,
+                        description: rule.payload.description || rule.source,
+                    }),
+                });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.message || 'Не удалось сохранить правило подписки');
                 }
-            };
-
-            const saveRecurringRules = (rules) => {
-                localStorage.setItem(getScopedStorageKey(RECURRING_RULES_KEY_PREFIX), JSON.stringify(rules));
-            };
-
-            const addRecurringRule = (rule) => {
-                const rules = getStoredRecurringRules();
-                rules.push(rule);
-                saveRecurringRules(rules);
             };
 
             const processRecurringRules = async () => {
-                const rules = getStoredRecurringRules();
-                if (rules.length === 0) return;
-                const today = new Date();
-                const todayIso = toDateInputValue(today);
-                let changed = false;
-
-                for (const rule of rules) {
-                    const intervalDays = Number(rule.intervalDays || 0);
-                    if (!intervalDays || intervalDays < 1) continue;
-                    let cursor = new Date(`${rule.lastRunDate}T00:00:00`);
-                    if (Number.isNaN(cursor.getTime())) continue;
-
-                    while (true) {
-                        cursor.setDate(cursor.getDate() + intervalDays);
-                        const nextIso = toDateInputValue(cursor);
-                        if (nextIso > todayIso) break;
-
-                        const endpoint = rule.type === 'income' ? `${API_URL}/incomes` : `${API_URL}/expenses`;
-                        const payload = { ...rule.payload, date: nextIso };
-                        const response = await apiFetch(endpoint, {
-                            method: 'POST',
-                            body: JSON.stringify(payload),
-                        });
-                        if (!response.ok) break;
-                        rule.lastRunDate = nextIso;
-                        changed = true;
-                    }
-                }
-
-                saveRecurringRules(rules);
-                if (changed) await refreshAllExpenses();
+                // Перенесено на серверный scheduler.
             };
 
             const renderExpenseRow = (expense, index) => {
@@ -1797,8 +1801,9 @@
                             expenseErrorDiv.textContent = 'Укажите корректную периодичность повторения.';
                             return;
                         }
-                        addRecurringRule({
+                        await addRecurringRule({
                             type: 'expense',
+                            source: payload.description || 'Регулярный расход',
                             intervalDays,
                             lastRunDate: payload.date,
                             payload: {
@@ -1845,8 +1850,9 @@
                             incomeErrorDiv.textContent = 'Укажите корректную периодичность повторения.';
                             return;
                         }
-                        addRecurringRule({
+                        await addRecurringRule({
                             type: 'income',
+                            source: payload.description || 'Регулярный доход',
                             intervalDays,
                             lastRunDate: payload.date,
                             payload: {
