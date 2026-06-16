@@ -1,17 +1,12 @@
 package com.example.financemanager.controller;
 
-import com.example.financemanager.dto.AuthResponseDto;
-import com.example.financemanager.dto.LoginRequestDto;
-import com.example.financemanager.dto.RegisterRequestDto;
+import com.example.financemanager.dto.*;
 import com.example.financemanager.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/auth")
@@ -28,5 +23,36 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody LoginRequestDto request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/oauth/login")
+    public ResponseEntity<AuthResponseDto> oauthLogin(@Valid @RequestBody OAuthLoginRequestDto request) {
+        return ResponseEntity.ok(authService.oauthLogin(request));
+    }
+
+    @PostMapping("/oauth/link")
+    public ResponseEntity<Void> linkOAuth(@Valid @RequestBody OAuthLinkRequestDto request) {
+        authService.linkOAuth(request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/mfa/setup")
+    public ResponseEntity<MfaSetupResponseDto> setupTotp() {
+        return ResponseEntity.ok(authService.setupTotp());
+    }
+
+    @PostMapping("/mfa/enable")
+    public ResponseEntity<AuthResponseDto> enableTotp(@Valid @RequestBody MfaCodeRequestDto request) {
+        return ResponseEntity.ok(authService.enableTotp(request));
+    }
+
+    @PostMapping("/mfa/disable")
+    public ResponseEntity<AuthResponseDto> disableTotp(@Valid @RequestBody MfaCodeRequestDto request) {
+        return ResponseEntity.ok(authService.disableTotp(request));
+    }
+
+    @PostMapping("/recovery/complete")
+    public ResponseEntity<AuthResponseDto> completeRecovery(@Valid @RequestBody RecoveryFlowCompleteRequestDto request) {
+        return ResponseEntity.ok(authService.completeRecoveryFlow(request));
     }
 }

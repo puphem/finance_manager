@@ -11,4 +11,7 @@ public class LoginRequestDto {
 
     @NotBlank(message = "Пароль не может быть пустым")
     private String password;
+
+    private String mfaCode;
+    private String recoveryCode;
 }

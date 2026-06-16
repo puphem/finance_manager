@@ -86,9 +86,15 @@ public class BackupServiceImpl implements BackupService {
         BackupSnapshotDto safeSnapshot = snapshot == null ? new BackupSnapshotDto() : snapshot;
 
         expenseRepository.deleteAllByUser(user);
+        expenseRepository.flush();
         incomeRepository.deleteAllByUser(user);
+        incomeRepository.flush();
         receiptRepository.deleteAllByUser(user);
+        receiptRepository.flush();
+        subcategoryRepository.deleteAllByCategoryUser(user);
+        subcategoryRepository.flush();
         categoryRepository.deleteAllByUser(user);
+        categoryRepository.flush();
 
         Map<String, Category> categoriesByName = new HashMap<>();
         for (BackupSnapshotDto.BackupCategoryDto categoryDto : safeList(safeSnapshot.getCategories())) {

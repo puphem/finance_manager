@@ -464,6 +464,18 @@ select {
     gap: 8px;
 }
 
+.settings-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.settings-actions-row button {
+    flex: 1;
+    min-width: 150px;
+}
+
 .subcategory-quick-add {
     display: grid;
     grid-template-columns: 1fr;
@@ -862,6 +874,10 @@ select {
 
 #day-expenses-list {
     margin-top: 10px;
+}
+
+#day-expenses-filter-hint {
+    margin-top: 8px;
 }
 
 #day-expenses-list li {

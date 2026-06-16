@@ -14,4 +14,5 @@ public interface SubcategoryRepository extends JpaRepository<Subcategory, Long> 
     List<Subcategory> findByCategoryIdAndCategoryUser(Long categoryId, User user);
     Optional<Subcategory> findByIdAndCategoryUser(Long id, User user);
     boolean existsByCategoryIdAndCategoryUserAndNameIgnoreCase(Long categoryId, User user, String name);
+    void deleteAllByCategoryUser(User user);
 }

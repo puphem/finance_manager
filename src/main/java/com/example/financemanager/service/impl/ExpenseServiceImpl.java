@@ -1,6 +1,7 @@
 package com.example.financemanager.service.impl;
 
 import com.example.financemanager.dto.CategoryExpenseDto;
+import com.example.financemanager.dto.CategoryPredictionDto;
 import com.example.financemanager.dto.ExpenseRequestDto;
 import com.example.financemanager.dto.ExpenseResponseDto;
 import com.example.financemanager.dto.SubcategoryExpenseDto;
@@ -18,6 +19,7 @@ import com.example.financemanager.repository.SubcategoryRepository;
 import com.example.financemanager.service.CategoryAssignmentService;
 import com.example.financemanager.service.CurrentUserResolver;
 import com.example.financemanager.service.ExpenseService;
+import com.example.financemanager.service.PersonalCategoryModelService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +39,7 @@ public class ExpenseServiceImpl implements ExpenseService {
     private final SubcategoryRepository subcategoryRepository;
     private final ReceiptRepository receiptRepository;
     private final CategoryAssignmentService categoryAssignmentService;
+    private final PersonalCategoryModelService personalCategoryModelService;
     private final ExpenseMapper expenseMapper;
     private final CurrentUserResolver currentUserResolver;
 
@@ -54,6 +57,7 @@ public class ExpenseServiceImpl implements ExpenseService {
         applySubcategory(expense, expenseDto.getSubcategoryId(), category, user);
 
         expenseRepository.save(expense);
+        personalCategoryModelService.registerFeedback(user, expenseDto.getSuggestedCategoryId(), category.getId());
         return expenseMapper.toResponseDto(expense);
     }
 
@@ -112,6 +116,7 @@ public class ExpenseServiceImpl implements ExpenseService {
         applySubcategory(expense, expenseDto.getSubcategoryId(), category, user);
 
         Expense updatedExpense = expenseRepository.save(expense);
+        personalCategoryModelService.registerFeedback(user, expenseDto.getSuggestedCategoryId(), category.getId());
         return expenseMapper.toResponseDto(updatedExpense);
     }
 
@@ -148,6 +153,13 @@ public class ExpenseServiceImpl implements ExpenseService {
         }
         LocalDate[] range = resolveDateRange(period);
         return expenseRepository.findSubcategoryExpensesByUserAndCategoryAndDateBetween(user, categoryId, range[0], range[1]);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CategoryPredictionDto predictCategory(String description) {
+        User user = currentUserResolver.getCurrentUser();
+        return personalCategoryModelService.predict(description, user);
     }
 
     private LocalDate[] resolveDateRange(String period) {

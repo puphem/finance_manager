@@ -1,6 +1,7 @@
 package com.example.financemanager.controller;
 
 import com.example.financemanager.dto.CategoryExpenseDto;
+import com.example.financemanager.dto.CategoryPredictionDto;
 import com.example.financemanager.dto.ExpenseRequestDto;
 import com.example.financemanager.dto.ExpenseResponseDto;
 import com.example.financemanager.dto.SubcategoryExpenseDto;
@@ -59,5 +60,10 @@ public class ExpenseController {
             @RequestParam(defaultValue = "month") String period
     ) {
         return ResponseEntity.ok(expenseService.getSubcategoryExpenseSummary(categoryId, period));
+    }
+
+    @GetMapping("/predict-category")
+    public ResponseEntity<CategoryPredictionDto> predictCategory(@RequestParam String description) {
+        return ResponseEntity.ok(expenseService.predictCategory(description));
     }
 }

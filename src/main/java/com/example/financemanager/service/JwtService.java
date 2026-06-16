@@ -1,5 +1,6 @@
 package com.example.financemanager.service;
 
+import com.example.financemanager.entity.enums.AuthState;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
@@ -25,14 +26,27 @@ public class JwtService {
         return extractClaim(token, Claims::getSubject);
     }
 
+    public AuthState extractAuthState(String token) {
+        String value = extractClaim(token, claims -> claims.get("auth_state", String.class));
+        if (value == null || value.isBlank()) {
+            return AuthState.AUTHENTICATED;
+        }
+        return AuthState.valueOf(value);
+    }
+
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
     public String generateToken(UserDetails userDetails) {
+        return generateToken(userDetails, AuthState.AUTHENTICATED);
+    }
+
+    public String generateToken(UserDetails userDetails, AuthState authState) {
         return Jwts.builder()
                 .subject(userDetails.getUsername())
+                .claim("auth_state", authState.name())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
                 .signWith(getSignInKey())
@@ -42,6 +56,10 @@ public class JwtService {
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+    }
+
+    public boolean isTokenValidForState(String token, UserDetails userDetails, AuthState expected) {
+        return isTokenValid(token, userDetails) && extractAuthState(token) == expected;
     }
 
     private boolean isTokenExpired(String token) {

@@ -190,21 +190,20 @@
                     <input type="text" id="receipt-api-token-input" placeholder="Введите персональный токен">
                     <div class="field-hint">Используется при сканировании чеков. Если пусто — используется серверный токен.</div>
                 </div>
-                <div class="form-group">
+                <div class="form-group settings-actions-row">
                     <button type="button" id="save-receipt-api-token-btn">Сохранить токен</button>
-                </div>
-                <div class="form-group settings-backup">
                     <button type="button" id="export-backup-btn">Экспорт backup</button>
-                </div>
-                <div class="form-group settings-backup">
                     <button type="button" id="import-backup-btn">Импорт backup</button>
                     <input type="file" id="import-backup-file-input" accept="application/json" class="hidden">
                 </div>
                 <form id="update-username-form" class="form-group settings-account-form">
-                    <label for="new-username-input">Сменить логин</label>
-                    <input type="text" id="new-username-input" placeholder="Новый логин" minlength="3" maxlength="50" required>
-                    <input type="password" id="username-current-password-input" placeholder="Текущий пароль" required>
-                    <button type="submit">Обновить логин</button>
+                    <label for="new-username-input">Логин (изменить нельзя)</label>
+                    <input type="text" id="new-username-input" readonly>
+                </form>
+                <form id="update-display-name-form" class="form-group settings-account-form">
+                    <label for="display-name-input">Имя пользователя</label>
+                    <input type="text" id="display-name-input" placeholder="Отображаемое имя" minlength="1" maxlength="80" required>
+                    <button type="submit">Сохранить имя</button>
                 </form>
                 <form id="update-password-form" class="form-group settings-account-form">
                     <label for="new-password-input">Сменить пароль</label>
@@ -382,7 +381,7 @@
         <section id="day-chart-section">
             <canvas id="day-expense-chart" role="img" aria-label="Диаграмма расходов за выбранный день"></canvas>
         </section>
-        <button type="button" id="day-chart-back-btn" class="hidden">← Назад к категориям</button>
+        <div id="day-expenses-filter-hint" class="field-hint hidden"></div>
         <button type="button" id="toggle-day-expenses-btn">Показать траты за день</button>
         <ul id="day-expenses-list" class="hidden"></ul>
         <div id="day-chart-empty" class="field-hint hidden">За этот день нет расходов.</div>
