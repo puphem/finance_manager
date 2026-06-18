@@ -119,101 +119,112 @@
     };
 
     const setupAuthPage = () => {
-        const tabLogin = document.getElementById('tab-login');
-        const tabRegister = document.getElementById('tab-register');
-        const loginForm = document.getElementById('login-form');
-        const registerForm = document.getElementById('register-form');
-        const loginError = document.getElementById('login-error');
-        const registerError = document.getElementById('register-error');
+            const tabLogin = document.getElementById('tab-login');
+            const tabRegister = document.getElementById('tab-register');
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
+            const loginError = document.getElementById('login-error');
+            const registerError = document.getElementById('register-error');
 
-        tabLogin.addEventListener('click', () => {
-            tabLogin.classList.add('active');
-            tabRegister.classList.remove('active');
-            loginForm.style.display = '';
-            registerForm.style.display = 'none';
-            loginError.textContent = '';
-        });
+            const showError = (el, message) => {
+                el.textContent = message;
+                el.style.display = 'block';
+            };
 
-        tabRegister.addEventListener('click', () => {
-            tabRegister.classList.add('active');
-            tabLogin.classList.remove('active');
-            registerForm.style.display = '';
-            loginForm.style.display = 'none';
-            registerError.textContent = '';
-        });
+            const hideError = (el) => {
+                el.style.display = 'none';
+                el.textContent = '';
+            };
 
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            loginError.textContent = '';
-            const username = document.getElementById('login-username').value;
-            const password = document.getElementById('login-password').value;
-            try {
-                const response = await fetch(`${API_URL}/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password }),
-                });
-                if (response.ok) {
-                    let data = await response.json();
-                    data = await resolveMfaLogin(username, password, data);
-                    data = await finalizeRecoveryFlow(data);
-                    setToken(data.token);
-                    setStoredUsername(data.username);
-                    setStoredDisplayName(data.displayName || data.username);
-                    showApp();
-                    main().catch(err => console.error(err));
-                } else {
-                    const err = await response.json().catch(() => ({}));
-                    loginError.textContent = err.message || 'Неверный логин или пароль.';
-                }
-            } catch (err) {
-                loginError.textContent = 'Ошибка соединения с сервером.';
-            }
-        });
+            tabLogin.addEventListener('click', () => {
+                tabLogin.classList.add('active');
+                tabRegister.classList.remove('active');
+                loginForm.style.display = '';
+                registerForm.style.display = 'none';
+                hideError(loginError);
+            });
 
-        registerForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            registerError.textContent = '';
-            const username = document.getElementById('reg-username').value;
-            const password = document.getElementById('reg-password').value;
-            try {
-                const response = await fetch(`${API_URL}/auth/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password }),
-                });
-                if (response.status === 201) {
-                    let data = await response.json().catch(() => null);
-                    if (data?.token && data?.username) {
-                        data = await finalizeRecoveryFlow(data);
+            tabRegister.addEventListener('click', () => {
+                tabRegister.classList.add('active');
+                tabLogin.classList.remove('active');
+                registerForm.style.display = '';
+                loginForm.style.display = 'none';
+                hideError(registerError);
+            });
+
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                hideError(loginError);
+                const username = document.getElementById('login-username').value;
+                const password = document.getElementById('login-password').value;
+                try {
+                    const response = await fetch(`${API_URL}/auth/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password }),
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
                         setToken(data.token);
                         setStoredUsername(data.username);
                         setStoredDisplayName(data.displayName || data.username);
+                        showApp();
+                        main().catch(err => console.error(err));
                     } else {
-                        const loginResponse = await fetch(`${API_URL}/auth/login`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username, password }),
-                        });
-                        if (!loginResponse.ok) {
-                            throw new Error('Регистрация успешна, но не удалось выполнить автологин.');
-                        }
-                        const loginData = await loginResponse.json();
-                        setToken(loginData.token);
-                        setStoredUsername(loginData.username);
-                        setStoredDisplayName(loginData.displayName || loginData.username);
+                        const err = await response.json().catch(() => ({}));
+                        showError(loginError, err.message || 'Неверный логин или пароль. Попробуйте снова.');
                     }
-                    showApp();
-                    main().catch(err => console.error(err));
-                } else {
-                    const err = await response.json().catch(() => ({}));
-                    registerError.textContent = err.message || 'Ошибка регистрации.';
+                } catch (err) {
+                    showError(loginError, 'Сервер недоступен. Проверьте интернет-соединение.');
                 }
-            } catch (err) {
-                registerError.textContent = 'Ошибка соединения с сервером.';
-            }
-        });
-    };
+            });
+
+            registerForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                hideError(registerError);
+                const username = document.getElementById('reg-username').value;
+                const password = document.getElementById('reg-password').value;
+
+                if (password.length < 6) {
+                    showError(registerError, 'Пароль должен быть не менее 6 символов.');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_URL}/auth/register`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password }),
+                    });
+                    if (response.status === 201) {
+                        const data = await response.json().catch(() => null);
+                        if (data?.token && data?.username) {
+                            setToken(data.token);
+                            setStoredUsername(data.username);
+                            setStoredDisplayName(data.displayName || data.username);
+                        } else {
+                            // Фолбэк на логин, если регистрации вернула пустой токен
+                            const loginResponse = await fetch(`${API_URL}/auth/login`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ username, password }),
+                            });
+                            const loginData = await loginResponse.json();
+                            setToken(loginData.token);
+                            setStoredUsername(loginData.username);
+                            setStoredDisplayName(loginData.displayName || loginData.username);
+                        }
+                        showApp();
+                        main().catch(err => console.error(err));
+                    } else {
+                        const err = await response.json().catch(() => ({}));
+                        showError(registerError, err.message || 'Этот логин уже занят или произошла ошибка.');
+                    }
+                } catch (err) {
+                    showError(registerError, 'Сервер недоступен. Проверьте интернет-соединение.');
+                }
+            });
+        };
 
     const getElement = (id) => {
         const element = document.getElementById(id);
@@ -2081,6 +2092,16 @@
             initInProgress = false;
         }
     }
+
+    const urlParams = new URLSearchParams(window.location.search);
+        const urlToken = urlParams.get('token');
+        if (urlToken) {
+            setToken(urlToken);
+            setStoredUsername(decodeURIComponent(urlParams.get('username') || ''));
+            setStoredDisplayName(decodeURIComponent(urlParams.get('displayName') || urlParams.get('username') || ''));
+            // Очищаем URL, чтобы токен не висел в адресной строке
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
 
     setupAuthPage();
     registerPwaSupport().catch(() => {});

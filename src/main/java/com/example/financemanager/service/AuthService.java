@@ -137,6 +137,21 @@ public class AuthService {
     }
 
     @Transactional
+    public User processOAuthUser(String email, String displayName) {
+        return userRepository.findByUsername(email).orElseGet(() -> {
+            User newUser = new User();
+            newUser.setUsername(email);
+            newUser.setDisplayName(displayName != null && !displayName.isBlank() ? displayName : email);
+            // Генерируем случайный пароль, так как вход через OAuth
+            newUser.setPassword(passwordEncoder.encode(java.util.UUID.randomUUID().toString()));
+            newUser.setRole("ROLE_USER");
+            userRepository.save(newUser);
+            seedDefaultCategories(newUser);
+            return newUser;
+        });
+    }
+
+    @Transactional
     public void linkOAuth(OAuthLinkRequestDto request) {
         User user = currentUserResolver.getCurrentUser();
         if (request.getProvider() == LoginProvider.LOCAL) {

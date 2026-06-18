@@ -22,6 +22,8 @@
 <div id="auth-page">
     <div class="auth-card">
         <h1>Менеджер финансов</h1>
+        <p class="auth-subtitle">Контролируйте свои расходы легко и удобно</p>
+
         <div class="auth-tabs">
             <button class="auth-tab active" id="tab-login">Войти</button>
             <button class="auth-tab" id="tab-register">Регистрация</button>
@@ -30,30 +32,44 @@
         <!-- Форма входа -->
         <form id="login-form">
             <div class="form-group">
-                <label for="login-username">Логин:</label>
+                <label for="login-username">Логин (или Email)</label>
                 <input type="text" id="login-username" required placeholder="Введите логин">
             </div>
             <div class="form-group">
-                <label for="login-password">Пароль:</label>
+                <label for="login-password">Пароль</label>
                 <input type="password" id="login-password" required placeholder="Введите пароль">
             </div>
-            <div id="login-error" class="auth-error"></div>
-            <button type="submit" style="width:100%; margin-top:5px;">Войти</button>
+            <div id="login-error" class="auth-error" style="display: none;"></div>
+            <button type="submit" class="auth-main-btn">Войти</button>
         </form>
 
         <!-- Форма регистрации -->
         <form id="register-form" style="display:none;">
             <div class="form-group">
-                <label for="reg-username">Логин:</label>
+                <label for="reg-username">Логин</label>
                 <input type="text" id="reg-username" required placeholder="От 3 до 50 символов">
+                <div class="field-hint">Используется для входа. Можно использовать email.</div>
             </div>
             <div class="form-group">
-                <label for="reg-password">Пароль:</label>
+                <label for="reg-password">Пароль</label>
                 <input type="password" id="reg-password" required placeholder="Минимум 6 символов">
             </div>
-            <div id="register-error" class="auth-error"></div>
-            <button type="submit" style="width:100%; margin-top:5px;">Создать аккаунт</button>
+            <div id="register-error" class="auth-error" style="display: none;"></div>
+            <button type="submit" class="auth-main-btn">Создать аккаунт</button>
         </form>
+
+        <div class="auth-divider">
+            <span>ИЛИ</span>
+        </div>
+
+        <a href="/oauth2/authorization/yandex" class="yandex-login-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px">
+                <path fill="#FF0000" d="M24 4C12.95 4 4 12.95 4 24s8.95 20 20 20 20-8.95 20-20S35.05 4 24 4z"/>
+                <path fill="#FFF" d="M25.79 34.21V16.89c0-2.45-1.07-3.92-3.13-3.92-2.19 0-3.4 1.48-3.4 3.92v4.86h-2.93v-4.9c0-3.77 2.15-6.32 6.33-6.32 4.14 0 6.06 2.55 6.06 6.32v17.36h-2.93z"/>
+                <path fill="#FFF" d="M19.26 23.94l6.53 10.27h3.42L22.25 23.2l6.47-9.35h-3.41l-5.01 7.42v-5.22h-2.93v18.16h2.93v-5.27z"/>
+            </svg>
+            Войти через Яндекс ID
+        </a>
     </div>
 </div>
 

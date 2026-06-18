@@ -908,8 +908,6 @@ select {
     flex-shrink: 0;
 }
 
-/* ============ EXISTING IMPROVEMENTS ============ */
-
 @media (min-width: 700px) {
     body { padding: 16px; }
 
@@ -972,4 +970,77 @@ select {
         max-height: 560px;
         overflow: auto;
     }
+}
+
+
+.auth-subtitle {
+    text-align: center;
+    color: var(--muted-color);
+    margin-top: -15px;
+    margin-bottom: 25px;
+    font-size: 0.9em;
+}
+
+.auth-main-btn {
+    width: 100%;
+    margin-top: 15px;
+    font-size: 1.05rem;
+    padding: 12px;
+}
+
+.auth-error {
+    background: rgba(231, 76, 60, 0.1);
+    color: var(--danger);
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+    border-left: 4px solid var(--danger);
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 25px 0 15px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.auth-divider span {
+    padding: 0 10px;
+    color: var(--muted-color);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.yandex-login-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    background-color: var(--surface-alt);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    padding: 10px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.96rem;
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.yandex-login-btn:hover {
+    background-color: #f1f1f1;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+:root[data-theme="dark"] .yandex-login-btn:hover {
+    background-color: #2c3e50;
 }
