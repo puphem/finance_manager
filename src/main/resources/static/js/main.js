@@ -456,6 +456,34 @@
                 }
             });
 
+            document.getElementById('export-csv-btn').addEventListener('click', () => {
+                if (!allTransactionsCache || allTransactionsCache.length === 0) {
+                    alert('Нет данных для выгрузки');
+                    return;
+                }
+
+                let csvContent = "\uFEFFДата;Тип;Сумма;Категория;Подкатегория;Описание\n";
+
+                allTransactionsCache.forEach(t => {
+                    const date = new Date(t.date).toLocaleDateString('ru-RU');
+                    const type = t.entryType === 'income' ? 'Доход' : 'Расход';
+                    const amount = t.amount;
+                    const category = t.category?.name || '-';
+                    const subcategory = t.subcategory?.name || '-';
+                    const desc = (t.description || '').replace(/;/g, ',');
+
+                    csvContent += `${date};${type};${amount};${category};${subcategory};${desc}\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `finance_report_${new Date().toLocaleDateString('ru-RU')}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            });
+
             importBackupBtn.addEventListener('click', () => importBackupFileInput.click());
             importBackupFileInput.addEventListener('change', async () => {
                 const file = importBackupFileInput.files?.[0];
@@ -557,6 +585,7 @@
 
             const setActiveView = (viewId) => {
                 currentViewId = viewId;
+                window.location.hash = viewId;
                 appViews.forEach(view => {
                     view.classList.toggle('hidden', view.id !== viewId);
                 });
@@ -2078,6 +2107,13 @@
             await updateDashboard();
             setActiveView('dashboard-view');
             startAutoSync();
+
+            const hash = window.location.hash.replace('#', '');
+            if (hash && document.getElementById(hash)) {
+                setActiveView(hash);
+            } else {
+                setActiveView('dashboard-view');
+            }
 
             appInitialized = true;
             console.log('main.js: Инициализация завершена.');

@@ -6,7 +6,7 @@ PROJECT_ROOT = '.'
 # Имя файла, в который будет сохранен результат.
 OUTPUT_FILE = 'project_context.txt'
 # Расширения файлов, которые мы хотим включить.
-INCLUDE_EXTENSIONS = ['.java', '.js', '.html', '.css', '.properties', '.gradle']
+INCLUDE_EXTENSIONS = ['.java', '.js', '.html', '.css', '.properties', '.gradle', '.yml', 'Dockerfile']
 # Папки, которые нужно проигнорировать.
 EXCLUDE_DIRS = ['.gradle', 'build', '.idea', 'out', 'data', '.git']
 
